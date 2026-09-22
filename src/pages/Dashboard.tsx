@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, AlertTriangle, ArrowRight, BarChart3, Clock, Settings, X, GripVertical, Check } from 'lucide-react';
+import { Calendar, AlertTriangle, ArrowRight, BarChart3, Clock, Settings, X, GripVertical, Check, Sparkles, PlusCircle } from 'lucide-react';
 import { format, differenceInDays } from 'date-fns';
 import { useProjects } from '../context/ProjectContext';
 import { useWorkflow } from '../context/WorkflowContext';
+import { useAuth } from '../context/AuthContext';
+import { generateFieldTestSamples } from '../utils/sampleDataGenerator';
 import type { Project } from '../types';
 
 interface WidgetConfig {
@@ -19,8 +21,11 @@ const defaultWidgets: WidgetConfig[] = [
 ];
 
 export default function Dashboard() {
-  const { projects, actions, handleCompleteAction } = useProjects();
+  const { projects, actions, handleCompleteAction, postponeAction, addProject } = useProjects();
+  const { user } = useAuth();
   const { kanbanColumns, nodes, edges } = useWorkflow();
+  const [postponeMenuId, setPostponeMenuId] = useState<string | null>(null);
+  const [isInjectingSample, setIsInjectingSample] = useState(false);
   const [widgets, setWidgets] = useState<WidgetConfig[]>(() => {
     const saved = localStorage.getItem('temasak-dashboard-widgets');
     if (saved) {
@@ -40,7 +45,38 @@ export default function Dashboard() {
     localStorage.setItem('temasak-dashboard-widgets', JSON.stringify(widgets));
   }, [widgets]);
 
+  // 外側クリックで延期メニューを閉じる
+  useEffect(() => {
+    if (!postponeMenuId) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.postpone-container')) {
+        setPostponeMenuId(null);
+      }
+    };
+    document.addEventListener('click', handleOutsideClick);
+    return () => document.removeEventListener('click', handleOutsideClick);
+  }, [postponeMenuId]);
+
   const getProject = (id: string) => projects.find(p => p.id === id);
+
+  const handleInjectSamples = async () => {
+    if (window.confirm('現場テスト用のリアルなサンプル案件・ToDo（さくら内科、中央整形外科、ひまわり小児科、緑が丘眼科の4件）を一括投入しますか？')) {
+      setIsInjectingSample(true);
+      try {
+        const samples = generateFieldTestSamples(user?.name || '松浦 貴文');
+        for (let i = 0; i < samples.projects.length; i++) {
+          await addProject(samples.projects[i], samples.actions[i]);
+        }
+        alert('現場テスト用のサンプル案件・ToDo（4件）を投入しました！');
+      } catch (e: any) {
+        console.error('Error injecting samples:', e);
+        alert('サンプル投入中にエラーが発生しました。');
+      } finally {
+        setIsInjectingSample(false);
+      }
+    }
+  };
 
   // 1. 今日やること
   const activeActions = actions.filter(a => a.status === '未完了');
@@ -167,7 +203,75 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', position: 'relative' }}>
+            {/* 延期クイックメニュー */}
+            <div className="postpone-container" style={{ position: 'relative' }}>
+              <button 
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setPostponeMenuId(postponeMenuId === action.id ? null : action.id)}
+                style={{
+                  minHeight: '44px',
+                  padding: '0.5rem 0.85rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  color: 'var(--text-main)',
+                  backgroundColor: '#ffffff'
+                }}
+                title="期日を延期する"
+              >
+                <Clock size={15} color="var(--text-muted)" />
+                <span>延期</span>
+              </button>
+
+              {postponeMenuId === action.id && (
+                <div style={{
+                  position: 'absolute',
+                  right: 0,
+                  bottom: '100%',
+                  marginBottom: '6px',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '0.5rem',
+                  boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
+                  zIndex: 50,
+                  minWidth: '140px',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <button 
+                    type="button"
+                    onClick={() => { postponeAction(action.id, 1); setPostponeMenuId(null); }}
+                    style={{ padding: '0.6rem 0.85rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.85rem', borderBottom: '1px solid #f1f5f9' }}
+                    className="hover-bg-gray"
+                  >
+                    📅 明日へ (+1日)
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => { postponeAction(action.id, 3); setPostponeMenuId(null); }}
+                    style={{ padding: '0.6rem 0.85rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.85rem', borderBottom: '1px solid #f1f5f9' }}
+                    className="hover-bg-gray"
+                  >
+                    ⏩ +3日後へ
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => { postponeAction(action.id, 7); setPostponeMenuId(null); }}
+                    style={{ padding: '0.6rem 0.85rem', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', fontSize: '0.85rem' }}
+                    className="hover-bg-gray"
+                  >
+                    🗓️ 来週へ (+7日)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 完了ボタン */}
             <button 
               className="btn"
               onClick={() => handleCompleteAction(action.id)}
@@ -199,16 +303,40 @@ export default function Dashboard() {
   const widgetRenderers: Record<string, () => React.ReactNode> = {
     today: () => (
       <section key="today" style={{ marginBottom: '2.5rem' }}>
-        <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Calendar size={24} color={overdueActions.length > 0 ? "var(--danger)" : "var(--warning)"} /> 
             <span>今日やること (ToDo)</span>
           </div>
-          {overdueActions.length > 0 && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600, backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '1rem' }}>
-              ⚠️ 期限切れタスクがあります！
-            </span>
-          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {overdueActions.length > 0 && (
+              <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600, backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '1rem' }}>
+                ⚠️ 期限切れタスクがあります！
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleInjectSamples}
+              disabled={isInjectingSample}
+              style={{
+                fontSize: '0.75rem',
+                padding: '0.35rem 0.75rem',
+                borderRadius: '1rem',
+                border: '1px solid var(--border-color)',
+                backgroundColor: '#ffffff',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+              title="現場テスト用のサンプル案件4件を一括投入します"
+            >
+              <Sparkles size={13} color="var(--primary)" />
+              <span>{isInjectingSample ? '投入中...' : '🧪 テスト用データ投入'}</span>
+            </button>
+          </div>
         </div>
 
         <div className="summary-row" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
@@ -227,8 +355,23 @@ export default function Dashboard() {
         {renderActionList(overdueActions, 'overdue')}
         {renderActionList(todayActions, 'today')}
         {totalTodayAndOverdue === 0 && (
-          <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
-            🎉 現在対応が必要な急ぎのToDoはありません。順調です！
+          <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2.5rem 1.5rem' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+              🎉 現在対応が必要な急ぎのToDoはありません。順調です！
+            </p>
+            <p style={{ fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+              右上の「🎙️ 喋って作成」や「新規案件登録」からToDoを登録するか、テスト用サンプルデータを投入して動作をお試しください。
+            </p>
+            <button
+              type="button"
+              onClick={handleInjectSamples}
+              disabled={isInjectingSample}
+              className="btn btn-outline"
+              style={{ margin: '0 auto', fontSize: '0.875rem', gap: '0.4rem', borderColor: 'var(--primary)', color: 'var(--primary)' }}
+            >
+              <Sparkles size={16} />
+              <span>現場テスト用のサンプル案件（4件）を投入してみる</span>
+            </button>
           </div>
         )}
       </section>

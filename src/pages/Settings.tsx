@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Zap, Database, Bell, Link2, Plus, ArrowRight, Save, ToggleRight, ToggleLeft, Key, Bot, X, Trash2, Edit2 } from 'lucide-react';
+import { Settings as SettingsIcon, Zap, Database, Bell, Link2, Plus, ArrowRight, Save, ToggleRight, ToggleLeft, Key, Bot, X, Trash2, Edit2, Sparkles } from 'lucide-react';
 import { useNotifications } from '../context/NotificationContext';
 import { getAISettings, saveAISettings, type AISettings } from '../utils/ai';
 import { useMasterData, type MasterData } from '../context/MasterDataContext';
 import { useRules, type GlobalRule } from '../context/RuleContext';
+import { useProjects } from '../context/ProjectContext';
+import { useAuth } from '../context/AuthContext';
+import { generateFieldTestSamples } from '../utils/sampleDataGenerator';
 
 export default function Settings() {
   const [activeTab, setActiveTab] = useState<'rules' | 'master' | 'notifications' | 'integrations'>(() => {
@@ -24,6 +27,9 @@ export default function Settings() {
   const { settings: notifSettings, updateSettings } = useNotifications();
   const [aiSettings, setAiSettings] = useState<AISettings>(getAISettings);
   const { rules, toggleRule, deleteRule, addRule, updateRule } = useRules();
+  const { addProject } = useProjects();
+  const { user } = useAuth();
+  const [isInjectingSamples, setIsInjectingSamples] = useState(false);
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   
@@ -376,7 +382,44 @@ export default function Settings() {
         {renderMasterList('釣銭機カラー', 'changeMachineColors')}
       </div>
 
-      <div className="card" style={{ marginTop: '2rem', border: '1px solid var(--danger)', backgroundColor: '#fef2f2' }}>
+      {/* 現場テスト用サンプルデータ投入 */}
+      <div className="card" style={{ marginTop: '2rem', border: '1px solid rgba(79, 70, 229, 0.3)', backgroundColor: '#f5f3ff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <Sparkles size={20} color="var(--primary)" />
+          <h3 style={{ fontSize: '1rem', color: 'var(--primary)', margin: 0, fontWeight: 700 }}>
+            現場テスト用サンプルデータの一括投入
+          </h3>
+        </div>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+          「さくら内科クリニック（本日対応）」「中央整形外科（期限切れアラート）」「ひまわり小児科（明日デモ）」「緑が丘眼科（現調調整中）」のリアルな案件とToDoを一括投入し、現場での使い勝手をすぐに検証できます。
+        </p>
+        <button 
+          className="btn btn-primary" 
+          disabled={isInjectingSamples}
+          onClick={async () => {
+            if (window.confirm('現場テスト用のサンプル案件・ToDo（4件）を一括投入しますか？')) {
+              setIsInjectingSamples(true);
+              try {
+                const samples = generateFieldTestSamples(user?.name || '松浦 貴文');
+                for (let i = 0; i < samples.projects.length; i++) {
+                  await addProject(samples.projects[i], samples.actions[i]);
+                }
+                alert('現場テスト用データを投入しました！ダッシュボードや案件管理でご確認ください。');
+              } catch (e) {
+                console.error(e);
+                alert('投入中にエラーが発生しました。');
+              } finally {
+                setIsInjectingSamples(false);
+              }
+            }
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}
+        >
+          <Sparkles size={16} /> {isInjectingSamples ? '投入中...' : '現場テスト用サンプルデータ（4件）を投入する'}
+        </button>
+      </div>
+
+      <div className="card" style={{ marginTop: '1.5rem', border: '1px solid var(--danger)', backgroundColor: '#fef2f2' }}>
         <h3 style={{ fontSize: '1rem', color: 'var(--danger)', marginBottom: '0.5rem', marginTop: 0 }}>データの初期化（リセット）</h3>
         <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
           以前のデモデータ（山田太郎など）が残っていて画面がおかしい場合、すべてのデータをクリアして最新の初期データを読み込み直します。

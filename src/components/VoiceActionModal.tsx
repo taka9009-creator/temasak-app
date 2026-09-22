@@ -44,11 +44,12 @@ export default function VoiceActionModal({ isOpen, onClose, onSuccess, onFillFor
 
   if (!isOpen) return null;
 
-  // プリセット発話サンプル
+  // プリセット発話サンプル（現場特化・音声補正テスト対応）
   const samplePhrases = [
     'さくら内科クリニック、明日14時にデモ訪問決定。見積書持参',
-    'ひまわり眼科、来週火曜日にカタログと料金資料を送付',
-    'あおぞら小児科、明後日午前10時に初回電話ヒアリング'
+    'ひまわり小児科医院、来週水曜10時に現調。レセコン連動の確認希望',
+    '緑が丘眼科クリニック、明後日までにテマサック自動精算機の見積書送付',
+    '中央整形外科、院長からの返事待ち。来週月曜日に状況伺い電話'
   ];
 
   const handleApplyPreset = (phrase: string) => {
@@ -73,7 +74,7 @@ export default function VoiceActionModal({ isOpen, onClose, onSuccess, onFillFor
       email: '',
       contactPerson: parsedData.contactPerson,
       contactTitle: '担当者',
-      memo: parsedData.memo,
+      memo: `${parsedData.memo}${parsedData.tags.length > 0 ? `\n【タグ: ${parsedData.tags.join(', ')}】` : ''}`,
       source: '音声登録',
       receivedAt: new Date().toISOString().substring(0, 10),
       salesRep: defaultRep,
@@ -82,7 +83,7 @@ export default function VoiceActionModal({ isOpen, onClose, onSuccess, onFillFor
       status: initialStatus,
       priority: parsedData.priority,
       lastActivityAt: new Date().toISOString().substring(0, 10),
-      ballHolder: defaultRep,
+      ballHolder: parsedData.ballHolder || defaultRep,
       isImplementationProject: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -302,6 +303,23 @@ export default function VoiceActionModal({ isOpen, onClose, onSuccess, onFillFor
                   className="input-field"
                   style={{ flex: 1, padding: '0.35rem 0.5rem', fontSize: '0.875rem' }}
                 />
+              </div>
+
+              {/* ボール所持者 ＆ 検出タグ */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', paddingTop: '0.4rem', borderTop: '1px dashed #e9d5ff' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>ボール:</span>
+                <span className="badge neutral" style={{ fontSize: '0.75rem' }}>{parsedData.ballHolder}</span>
+                
+                {parsedData.tags && parsedData.tags.length > 0 && (
+                  <>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>タグ:</span>
+                    {parsedData.tags.map((t, idx) => (
+                      <span key={idx} style={{ fontSize: '0.75rem', backgroundColor: '#ede9fe', color: 'var(--primary)', padding: '0.15rem 0.5rem', borderRadius: '1rem', fontWeight: 600 }}>
+                        #{t}
+                      </span>
+                    ))}
+                  </>
+                )}
               </div>
             </div>
           </div>
