@@ -966,6 +966,31 @@ h2 {
   .kanban-column {
     flex: 0 0 260px;
   }
+
+  /* Mobile Project List Card View */
+  .desktop-table-view {
+    display: none !important;
+  }
+  .mobile-cards-view {
+    display: flex !important;
+  }
+
+  /* Mobile view-mode-tabs */
+  .view-mode-tabs {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .view-mode-tabs button {
+    flex: 1 0 auto;
+    white-space: nowrap;
+    min-height: 44px;
+    padding: 0.6rem 0.85rem !important;
+    font-size: 0.8rem !important;
+  }
+  .pm-header-container {
+    gap: 0.75rem !important;
+  }
 }
 
 /* Mobile styles for Workflow Map */

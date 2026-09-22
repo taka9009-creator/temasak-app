@@ -1,7 +1,7 @@
 import React from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Users, FileText, Settings, LogOut, UserPlus, Briefcase, Workflow, X, Truck } from 'lucide-react';
+import { LayoutDashboard, Settings, UserPlus, Briefcase, X } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -9,7 +9,6 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
-  const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuth();
 
@@ -52,10 +51,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <NavLink to="/projects" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose} end>
             <Briefcase size={20} />
             <span>案件管理</span>
-          </NavLink>
-          <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
-            <FileText size={20} />
-            <span>分析・レポート</span>
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
             <Settings size={20} />

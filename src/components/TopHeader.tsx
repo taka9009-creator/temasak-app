@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle2, AlertTriangle, Info, Check, Search, User, Menu, Settings, LogOut } from 'lucide-react';
+import { Bell, CheckCircle2, AlertTriangle, Info, Check, Search, User, Menu, Settings, LogOut, Mic } from 'lucide-react';
+import VoiceActionModal from './VoiceActionModal';
 import { useNotifications } from '../context/NotificationContext';
 import { useProjects } from '../context/ProjectContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,6 +19,7 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
   const { handleCompleteAction } = useProjects();
   const [isOpen, setIsOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'action' | 'info'>('all');
   const dropdownRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -70,16 +72,45 @@ export default function TopHeader({ onMenuClick }: TopHeaderProps) {
       <button 
         className="mobile-menu-btn" 
         onClick={onMenuClick}
-        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'none', marginRight: 'auto', color: 'var(--text-main)' }}
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'none', color: 'var(--text-main)', padding: '8px' }}
       >
         <Menu size={24} />
       </button>
 
-      {/* 検索バー（モック） */}
-      <div className="top-search-bar" style={{ position: 'relative', marginRight: 'auto' }}>
-        <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />
-        <input type="text" placeholder="案件検索..." className="input-field" style={{ paddingLeft: '32px', width: '300px', borderRadius: '20px', backgroundColor: '#f8fafc', border: '1px solid transparent' }} />
-      </div>
+      {/* スペーサー */}
+      <div style={{ marginRight: 'auto' }} />
+
+      {/* 🎙️ 音声で一瞬作成ボタン */}
+      <button
+        onClick={() => setIsVoiceModalOpen(true)}
+        className="btn-voice-trigger"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          padding: '0.45rem 0.9rem',
+          minHeight: '38px',
+          borderRadius: '2rem',
+          border: '1px solid rgba(79, 70, 229, 0.2)',
+          backgroundColor: '#eef2ff',
+          color: 'var(--primary)',
+          fontSize: '0.85rem',
+          fontWeight: 600,
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(79, 70, 229, 0.1)',
+          transition: 'all 0.2s ease'
+        }}
+        title="スマホで喋って一瞬でスケジュール作成"
+      >
+        <Mic size={16} color="var(--primary)" />
+        <span className="voice-trigger-text">喋って作成</span>
+      </button>
+
+      {/* 音声入力モーダル */}
+      <VoiceActionModal 
+        isOpen={isVoiceModalOpen} 
+        onClose={() => setIsVoiceModalOpen(false)} 
+      />
 
       {/* 通知センター */}
       <div style={{ position: 'relative' }} ref={dropdownRef}>

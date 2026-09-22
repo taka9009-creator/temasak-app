@@ -100,22 +100,95 @@ export default function Dashboard() {
       return d1 - d2;
     });
 
-  const renderActionList = (actionList: typeof activeActions, badgeType: string, badgeLabel: string) => (
+  const renderActionList = (actionList: typeof activeActions, type: 'overdue' | 'today' | 'tomorrow') => (
     actionList.map(action => {
       const project = getProject(action.projectId);
+      const isOverdue = type === 'overdue';
+      const isToday = type === 'today';
+      
+      let overdueDays = 0;
+      if (isOverdue && action.deadline) {
+        overdueDays = Math.max(1, differenceInDays(new Date(), new Date(action.deadline)));
+      }
+
       return (
-        <div key={action.id} className="card task-card">
-          <div style={{ flex: 1 }}>
-            <div style={{ marginBottom: '0.25rem' }}>
-              <span className={`badge ${badgeType}`}>{badgeLabel}</span>
-              <span style={{ fontWeight: 600, marginLeft: '0.5rem' }}>{project?.clinicName}</span>
+        <div 
+          key={action.id} 
+          className="card task-card"
+          style={{
+            borderLeft: isOverdue ? '5px solid var(--danger)' : isToday ? '5px solid var(--warning)' : '5px solid var(--info)',
+            backgroundColor: isOverdue ? '#fff5f5' : '#ffffff',
+            boxShadow: isOverdue ? '0 4px 12px rgba(239, 68, 68, 0.12)' : 'var(--shadow-sm)',
+            marginBottom: '0.75rem',
+            padding: '1rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            flexWrap: 'wrap'
+          }}
+        >
+          <div style={{ flex: '1 1 280px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem', flexWrap: 'wrap' }}>
+              {isOverdue && (
+                <span className="badge" style={{ backgroundColor: 'var(--danger)', color: 'white', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                  <AlertTriangle size={12} /> 期限超過 ({overdueDays}日遅れ)
+                </span>
+              )}
+              {isToday && (
+                <span className="badge" style={{ backgroundColor: 'var(--warning)', color: 'white', fontWeight: 700 }}>
+                  本日締切
+                </span>
+              )}
+              {!isOverdue && !isToday && (
+                <span className="badge" style={{ backgroundColor: 'var(--info)', color: 'white' }}>
+                  明日締切
+                </span>
+              )}
+              <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-main)' }}>
+                {project?.clinicName || '案件'}
+              </span>
+              {project?.contactPerson && (
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>({project.contactPerson} 様)</span>
+              )}
             </div>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>
-              {action.memo || '対応が必要です'} <ArrowRight size={14} style={{ verticalAlign: 'middle' }} /> <strong>{action.title}</strong>
+            
+            <div style={{ color: 'var(--text-main)', fontSize: '0.925rem', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, color: isOverdue ? 'var(--danger)' : 'var(--primary)' }}>{action.title}</span>
+              {action.memo && (
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                  — {action.memo}
+                </span>
+              )}
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              期限: <strong>{action.deadline}</strong> | 担当: {project?.salesRep || '未定'}
             </div>
           </div>
-          <div>
-            <button className="btn btn-primary" onClick={() => handleCompleteAction(action.id)}>完了</button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button 
+              className="btn"
+              onClick={() => handleCompleteAction(action.id)}
+              style={{
+                minHeight: '44px',
+                padding: '0.5rem 1.25rem',
+                backgroundColor: isOverdue ? 'var(--danger)' : 'var(--primary)',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '0.5rem',
+                fontWeight: 600,
+                fontSize: '0.875rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                boxShadow: isOverdue ? '0 2px 8px rgba(239, 68, 68, 0.3)' : '0 2px 8px rgba(79, 70, 229, 0.25)'
+              }}
+            >
+              <Check size={16} /> 完了にする
+            </button>
           </div>
         </div>
       );
@@ -126,20 +199,37 @@ export default function Dashboard() {
   const widgetRenderers: Record<string, () => React.ReactNode> = {
     today: () => (
       <section key="today" style={{ marginBottom: '2.5rem' }}>
-        <div className="section-title">
-          <Calendar size={24} color="var(--warning)" /> 
-          今日やること
+        <div className="section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Calendar size={24} color={overdueActions.length > 0 ? "var(--danger)" : "var(--warning)"} /> 
+            <span>今日やること (ToDo)</span>
+          </div>
+          {overdueActions.length > 0 && (
+            <span style={{ fontSize: '0.85rem', color: 'var(--danger)', fontWeight: 600, backgroundColor: '#fee2e2', padding: '0.25rem 0.75rem', borderRadius: '1rem' }}>
+              ⚠️ 期限切れタスクがあります！
+            </span>
+          )}
         </div>
-        <div className="summary-row">
-          <div className="summary-large">計 {totalTodayAndOverdue}件</div>
-          <div className="summary-item"><span className="status-dot dot-danger"></span> 期限超過 {overdueActions.length}件</div>
-          <div className="summary-item"><span className="status-dot dot-warning"></span> 今日期限 {todayActions.length}件</div>
-          <div className="summary-item"><span className="status-dot dot-success"></span> 明日期限 {tomorrowActions.length}件</div>
+
+        <div className="summary-row" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <div className="summary-large" style={{ fontWeight: 700, fontSize: '1.25rem' }}>計 {totalTodayAndOverdue}件</div>
+          <div className="summary-item" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: overdueActions.length > 0 ? 700 : 400, color: overdueActions.length > 0 ? 'var(--danger)' : 'inherit' }}>
+            <span className="status-dot dot-danger"></span> 期限超過 {overdueActions.length}件
+          </div>
+          <div className="summary-item" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span className="status-dot dot-warning"></span> 今日期限 {todayActions.length}件
+          </div>
+          <div className="summary-item" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span className="status-dot dot-success"></span> 明日期限 {tomorrowActions.length}件
+          </div>
         </div>
-        {renderActionList(overdueActions, 'danger', '期限超過')}
-        {renderActionList(todayActions, 'warning', '今日期限')}
+
+        {renderActionList(overdueActions, 'overdue')}
+        {renderActionList(todayActions, 'today')}
         {totalTodayAndOverdue === 0 && (
-          <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>今日のタスクはありません</div>
+          <div className="card" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+            🎉 現在対応が必要な急ぎのToDoはありません。順調です！
+          </div>
         )}
       </section>
     ),

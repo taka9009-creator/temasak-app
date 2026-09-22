@@ -301,9 +301,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (result) {
         newActions = result.newActions;
         nextBallHolder = result.nextBallHolder;
-      } else if (initialAction) {
-        newActions = [initialAction];
       }
+    }
+
+    if (initialAction) {
+      newActions = [initialAction, ...newActions.filter(a => a.title !== initialAction.title)];
+      nextBallHolder = initialAction.assignee || newProject.salesRep;
     }
 
     const finalProject = { ...newProject, ballHolder: nextBallHolder };
