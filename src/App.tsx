@@ -17,7 +17,15 @@ import { MasterDataProvider } from './context/MasterDataContext';
 import { WorkflowProvider } from './context/WorkflowContext';
 import { RuleProvider } from './context/RuleContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { EmailProvider } from './context/EmailContext';
 import Login from './pages/Login';
+
+// メール配信関連ページ
+import EmailDashboard from './pages/EmailMarketing/EmailDashboard';
+import EmailComposeWizard from './pages/EmailMarketing/EmailComposeWizard';
+import EmailHistory from './pages/EmailMarketing/EmailHistory';
+import EmailTemplates from './pages/EmailMarketing/EmailTemplates';
+import EmailOptOuts from './pages/EmailMarketing/EmailOptOuts';
 
 // Helper component for protected routes
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -47,6 +55,13 @@ function MainLayout({ isSidebarOpen, setIsSidebarOpen }: { isSidebarOpen: boolea
             <Route path="/projects" element={<ProjectManagement />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
+            
+            {/* メール配信関連ルート */}
+            <Route path="/email" element={<EmailDashboard />} />
+            <Route path="/email/compose" element={<EmailComposeWizard />} />
+            <Route path="/email/history" element={<EmailHistory />} />
+            <Route path="/email/templates" element={<EmailTemplates />} />
+            <Route path="/email/optouts" element={<EmailOptOuts />} />
           </Routes>
         </div>
       </main>
@@ -63,22 +78,24 @@ function App() {
       <WorkflowProvider>
         <MasterDataProvider>
           <ProjectProvider>
-            <NotificationProvider>
-              <BrowserRouter>
-                <Routes>
-                  <Route path="/login" element={<Login />} />
-                  <Route 
-                    path="/*" 
-                    element={
-                      <ProtectedRoute>
-                        <MainLayout isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
-                      </ProtectedRoute>
-                    } 
-                  />
-                </Routes>
-                <ToastContainer />
-              </BrowserRouter>
-            </NotificationProvider>
+            <EmailProvider>
+              <NotificationProvider>
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/login" element={<Login />} />
+                    <Route 
+                      path="/*" 
+                      element={
+                        <ProtectedRoute>
+                          <MainLayout isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
+                        </ProtectedRoute>
+                      } 
+                    />
+                  </Routes>
+                  <ToastContainer />
+                </BrowserRouter>
+              </NotificationProvider>
+            </EmailProvider>
           </ProjectProvider>
         </MasterDataProvider>
       </WorkflowProvider>
@@ -88,3 +105,4 @@ function App() {
 }
 
 export default App;
+

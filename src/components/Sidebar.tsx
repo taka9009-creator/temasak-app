@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Settings, UserPlus, Briefcase, X } from 'lucide-react';
+import { LayoutDashboard, Settings, UserPlus, Briefcase, X, Mail } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -51,6 +51,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <NavLink to="/projects" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose} end>
             <Briefcase size={20} />
             <span>案件管理</span>
+          </NavLink>
+          <NavLink to="/email" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
+            <Mail size={20} />
+            <span>メール配信</span>
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
             <Settings size={20} />

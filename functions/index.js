@@ -129,3 +129,8 @@ ${textContent}
     response.status(500).json({ error: `Extraction failed: ${error.message}` });
   }
 });
+
+// メール配信機能エンドポイント
+const emailFunctions = require("./email");
+exports.sendTestEmail = emailFunctions.sendTestEmail;
+exports.processEmailBatch = emailFunctions.processEmailBatch;

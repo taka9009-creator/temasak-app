@@ -8,7 +8,7 @@ export default function Login() {
   const [pass, setPass] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, demoLogin, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   React.useEffect(() => {
@@ -89,6 +89,28 @@ export default function Login() {
                 ログイン
               </>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              demoLogin();
+              navigate('/');
+            }}
+            style={{
+              marginTop: '0.75rem',
+              width: '100%',
+              padding: '0.65rem',
+              backgroundColor: '#f1f5f9',
+              border: '1px dashed #94a3b8',
+              borderRadius: '0.5rem',
+              color: '#334155',
+              fontWeight: 600,
+              fontSize: '0.85rem',
+              cursor: 'pointer'
+            }}
+          >
+            開発確認用：ワンクリックログイン（松浦 貴文）
           </button>
         </form>
         

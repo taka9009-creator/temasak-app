@@ -18,6 +18,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
+  demoLogin: () => void;
   logout: () => void;
 }
 
@@ -62,12 +63,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const demoLogin = () => {
+    setUser({
+      id: 'demo-user-1',
+      name: '松浦 貴文',
+      role: 'admin',
+      email: 'matsuura@temasak.jp'
+    });
+    setIsAuthenticated(true);
+  };
+
   const logout = async () => {
     try {
       await fbSignOut(auth);
     } catch (error) {
       console.error('Logout error:', error);
     }
+    setUser(null);
+    setIsAuthenticated(false);
   };
 
   if (isInitializing) {
@@ -75,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, user, login, demoLogin, logout }}>
       {children}
     </AuthContext.Provider>
   );
