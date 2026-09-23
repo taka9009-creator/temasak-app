@@ -250,6 +250,16 @@ interface EmailContextType {
     recordToProjectActivities?: boolean;
     onProgress?: (sent: number, failed: number, total: number) => void;
   }) => Promise<{ campaignId: string; successCount: number; failCount: number; errors: Array<{ email: string; error: string }> }>;
+  
+  // 手動送信アシストログ追加
+  addManualSendLog: (params: {
+    email: string;
+    companyName?: string;
+    recipientName?: string;
+    subject: string;
+    body: string;
+    templateName?: string;
+  }) => Promise<void>;
 }
 
 const EmailContext = createContext<EmailContextType | undefined>(undefined);
@@ -668,6 +678,47 @@ export function EmailProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  // 手動送信アシストログ追加
+  const addManualSendLog = async ({
+    email,
+    companyName = '',
+    recipientName = '',
+    subject,
+    body,
+    templateName
+  }: {
+    email: string;
+    companyName?: string;
+    recipientName?: string;
+    subject: string;
+    body: string;
+    templateName?: string;
+  }) => {
+    const logId = `log_manual_${Date.now()}_${uuidv4().substring(0, 8)}`;
+    const now = new Date().toISOString();
+    const newLog: EmailLog = {
+      id: logId,
+      campaignId: `cmp_manual_${Date.now()}`,
+      email,
+      companyName,
+      recipientName,
+      subject,
+      body,
+      status: 'sent',
+      sentAt: now,
+      templateName: templateName || '手動送信アシスト',
+      createdAt: now
+    };
+
+    try {
+      await setDoc(doc(db, 'email_logs', logId), newLog);
+    } catch (e) {
+      console.warn('Firestore write failed, saving to local state:', e);
+    }
+
+    setLogs(prev => [newLog, ...prev]);
+  };
+
   return (
     <EmailContext.Provider value={{
       templates,
@@ -680,7 +731,8 @@ export function EmailProvider({ children }: { children: ReactNode }) {
       removeOptOut,
       importOptOutsFromCsv,
       sendTestEmail,
-      startBatchCampaign
+      startBatchCampaign,
+      addManualSendLog
     }}>
       {children}
     </EmailContext.Provider>

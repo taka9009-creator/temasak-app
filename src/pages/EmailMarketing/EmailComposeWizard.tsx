@@ -19,6 +19,7 @@ import TemplateSelector from '../../components/Email/TemplateSelector';
 import EmailEditor from '../../components/Email/EmailEditor';
 import EmailPreviewModal from '../../components/Email/EmailPreviewModal';
 import BatchSendProgressModal from '../../components/Email/BatchSendProgressModal';
+import ManualSendAssistModal from '../../components/Email/ManualSendAssistModal';
 import { processRecipients } from '../../utils/emailValidator';
 import { ExtractedRecipient, ExtractionSummary, EmailTemplate, ColumnMapping } from '../../types/email';
 import { useEmail } from '../../context/EmailContext';
@@ -53,6 +54,7 @@ export default function EmailComposeWizard() {
   // モーダルステート
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
+  const [isManualAssistOpen, setIsManualAssistOpen] = useState(false);
 
   // エラー警告メッセージ
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
@@ -361,6 +363,62 @@ export default function EmailComposeWizard() {
               onBodyChange={setBody}
               onIncludeOptOutChange={setIncludeOptOut}
             />
+
+            {/* 社内安全送信アシスト案内 */}
+            <div style={{
+              marginTop: '1.5rem',
+              padding: '1.25rem',
+              backgroundColor: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '1rem',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div style={{
+                  width: '40px',
+                  height: '40px',
+                  borderRadius: '50%',
+                  backgroundColor: '#dcfce7',
+                  color: '#15803d',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem'
+                }}>
+                  🛡️
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#166534', fontSize: '0.95rem' }}>
+                    会社Google Workspace / Active! mail環境でも安全に送信
+                  </div>
+                  <div style={{ color: '#15803d', fontSize: '0.85rem', marginTop: '0.2rem' }}>
+                    「手動送信アシスト」は外部連携APIやトークンを一切使用しません。会社の監査ログにも一切痕跡が残らず、Gmail/Active! mailを1件ずつワンクリックで立ち上げて安全に送信できます。
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsManualAssistOpen(true)}
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  backgroundColor: '#16a34a',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '0.5rem',
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)'
+                }}
+              >
+                手動送信アシストを起動 🚀
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -375,7 +433,9 @@ export default function EmailComposeWizard() {
           border: '1px solid #e2e8f0',
           borderRadius: '0.75rem',
           padding: '1rem 1.5rem',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+          boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+          flexWrap: 'wrap',
+          gap: '1rem'
         }}>
           <button
             type="button"
@@ -397,7 +457,7 @@ export default function EmailComposeWizard() {
             <span>前へ戻る</span>
           </button>
 
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             {currentStep === 4 ? (
               <>
                 <button
@@ -420,6 +480,29 @@ export default function EmailComposeWizard() {
                   <span>差し込みプレビュー確認</span>
                 </button>
 
+                {/* おすすめ: 会社にバレない手動アシスト */}
+                <button
+                  type="button"
+                  onClick={() => setIsManualAssistOpen(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 1.4rem',
+                    backgroundColor: '#059669',
+                    border: 'none',
+                    color: '#ffffff',
+                    borderRadius: '0.5rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 4px rgba(5, 150, 105, 0.25)'
+                  }}
+                  title="会社監査ログに痕跡を残さず、Gmail/Active! mailを手動で1クリック起動して送信します"
+                >
+                  <ShieldCheck size={18} />
+                  <span>🛡️ 社内セキュア送信（手動アシスト）</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setIsSendModalOpen(true)}
@@ -427,18 +510,18 @@ export default function EmailComposeWizard() {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.5rem',
-                    padding: '0.65rem 1.5rem',
-                    backgroundColor: '#2563eb',
-                    border: 'none',
-                    color: '#ffffff',
+                    padding: '0.65rem 1.25rem',
+                    backgroundColor: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    color: '#475569',
                     borderRadius: '0.5rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+                    fontWeight: 600,
+                    cursor: 'pointer'
                   }}
+                  title="自動送信テスト・シミュレータ"
                 >
                   <Send size={18} />
-                  <span>テスト送信・本番送信へ進む</span>
+                  <span>自動シミュレータ</span>
                 </button>
               </>
             ) : (
@@ -488,6 +571,21 @@ export default function EmailComposeWizard() {
         recipients={recipients}
         subject={subject}
         body={body}
+        templateName={selectedTemplateName}
+      />
+
+      {/* 会社安全・ワンクリック手動送信アシストモーダル */}
+      <ManualSendAssistModal
+        isOpen={isManualAssistOpen}
+        onClose={() => setIsManualAssistOpen(false)}
+        onComplete={() => {
+          setIsManualAssistOpen(false);
+          navigate('/email/history');
+        }}
+        recipients={recipients}
+        subject={subject}
+        body={body}
+        includeOptOut={includeOptOut}
         templateName={selectedTemplateName}
       />
     </div>
