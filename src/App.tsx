@@ -27,6 +27,9 @@ import EmailHistory from './pages/EmailMarketing/EmailHistory';
 import EmailTemplates from './pages/EmailMarketing/EmailTemplates';
 import EmailOptOuts from './pages/EmailMarketing/EmailOptOuts';
 
+import KnowledgeManagement from './pages/KnowledgeManagement';
+import KnowledgeBrowser from './pages/KnowledgeBrowser';
+
 // Helper component for protected routes
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -55,6 +58,10 @@ function MainLayout({ isSidebarOpen, setIsSidebarOpen }: { isSidebarOpen: boolea
             <Route path="/projects" element={<ProjectManagement />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
+            
+            {/* ナレッジ・ドキュメント取込 ＆ 辞書ブラウザ */}
+            <Route path="/knowledge" element={<KnowledgeManagement />} />
+            <Route path="/knowledge/browser" element={<KnowledgeBrowser />} />
             
             {/* メール配信関連ルート */}
             <Route path="/email" element={<EmailDashboard />} />

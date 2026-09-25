@@ -139,11 +139,20 @@ ${(project.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content}`).jo
               <Zap size={18} color="#0284c7" />
               <h3 style={{ margin: 0, fontSize: '1rem' }}>活動履歴からの AI 要約</h3>
             </div>
-            {!generatedSummary && !aiLoading && (
-              <button onClick={handleGenerateAISummary} className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>
-                ✨ AIで要約を生成する
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {!generatedSummary && !aiLoading && (
+                <button onClick={handleGenerateAISummary} className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>
+                  ✨ AIで要約を生成する
+                </button>
+              )}
+              <a
+                href="/email/compose"
+                className="btn btn-outline"
+                style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', color: '#6d28d9', borderColor: '#ddd6fe', backgroundColor: '#f5f3ff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <Sparkles size={14} /> ✉️ AI返信を作成
+              </a>
+            </div>
           </div>
 
           {aiLoading ? (

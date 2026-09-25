@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { OPTOUT_FOOTER_TEXT } from '../../utils/emailValidator';
 import { useEmail } from '../../context/EmailContext';
+import EmailKnowledgeModal from './EmailKnowledgeModal';
 
 interface EmailEditorProps {
   subject: string;
@@ -364,6 +365,16 @@ export default function EmailEditor({
           </div>
         </div>
       )}
+
+      {/* 8ステップ テマサック営業OS AIナレッジ起案モーダル */}
+      <EmailKnowledgeModal
+        isOpen={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
+        onApplyDraft={(s, b) => {
+          onSubjectChange(s);
+          onBodyChange(b);
+        }}
+      />
     </div>
   );
 }
