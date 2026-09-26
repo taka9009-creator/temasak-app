@@ -3,7 +3,47 @@ import seedData from '../utils/sales_os_seed.json';
 import { Search, Filter, BookOpen, CheckCircle, ShieldAlert, Award, FileText, Download, Sparkles } from 'lucide-react';
 
 export default function KnowledgeBrowser() {
-  const [knowledgeList] = useState<any[]>(seedData.knowledge || []);
+  const [knowledgeList, setKnowledgeList] = useState<any[]>(() => {
+    // LocalStorageから永続化したステータスを復元（無ければシードデータ）
+    const saved = localStorage.getItem('temasak_knowledge_reviews');
+    if (saved) {
+      try {
+        const reviewMap = JSON.parse(saved);
+        return (seedData.knowledge || []).map((k: any) => ({
+          ...k,
+          review_status: reviewMap[k.id] || k.review_status || 'unreviewed'
+        }));
+      } catch (e) {}
+    }
+    return seedData.knowledge || [];
+  });
+
+  const toggleApprovalStatus = (id: string) => {
+    setKnowledgeList(prevList => {
+      const newList = prevList.map(k => {
+        if (k.id === id) {
+          const nextStatus = k.review_status === 'approved' ? 'unreviewed' : 'approved';
+          return { ...k, review_status: nextStatus };
+        }
+        return k;
+      });
+
+      // LocalStorageに最新のレビュー状態マップを永続化
+      const reviewMap: Record<string, string> = {};
+      newList.forEach(k => {
+        if (k.review_status) reviewMap[k.id] = k.review_status;
+      });
+      localStorage.setItem('temasak_knowledge_reviews', JSON.stringify(reviewMap));
+      return newList;
+    });
+
+    if (selectedKnowledge && selectedKnowledge.id === id) {
+      setSelectedKnowledge((prev: any) => prev ? {
+        ...prev,
+        review_status: prev.review_status === 'approved' ? 'unreviewed' : 'approved'
+      } : null);
+    }
+  };
   const [activeTab, setActiveTab] = useState<'individual' | 'master' | 'documents'>('individual');
   
   // フィルタステート
@@ -350,10 +390,9 @@ export default function KnowledgeBrowser() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
+                  type="button"
                   onClick={() => {
-                    selectedKnowledge.review_status = selectedKnowledge.review_status === 'approved' ? 'unreviewed' : 'approved';
-                    setSelectedKnowledge({ ...selectedKnowledge });
-                    alert(`ステータスを「${selectedKnowledge.review_status === 'approved' ? '承認済' : '未確認'}」に変更しました`);
+                    toggleApprovalStatus(selectedKnowledge.id);
                   }}
                   style={{
                     padding: '0.5rem 1rem',
