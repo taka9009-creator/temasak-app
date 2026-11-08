@@ -1423,23 +1423,20 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         </div>
       </div>
 
-      {/* 3. かんたん検索・エリア＆月フィルタバー */}
+      {/* 3. かんたん検索・エリア＆月フィルタバー（コンパクト1行表示） */}
       <div style={{
         backgroundColor: '#ffffff',
         border: '1px solid #e2e8f0',
-        borderRadius: '0.85rem',
-        padding: '0.9rem 1.15rem',
+        borderRadius: '0.65rem',
+        padding: '0.45rem 0.7rem',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '0.75rem'
+        gap: '0.4rem 0.6rem'
       }}>
         {/* エリアワンタップピル */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginRight: '0.25rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <MapPin size={15} /> エリア:
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+          <MapPin size={13} color="#64748b" />
           {(['all', '北海道', '宮城県', '福島県', '秋田県', '岩手県'] as AreaFilter[]).map(area => {
             const count = area === 'all' ? kpiStats.allActiveCount : (kpiStats.byArea[area] || 0);
             const active = areaFilter === area;
@@ -1448,85 +1445,89 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 key={area}
                 onClick={() => setAreaFilter(area)}
                 style={{
-                  padding: '0.35rem 0.75rem',
+                  padding: '0.18rem 0.5rem',
                   borderRadius: '999px',
-                  border: active ? '1px solid #1e40af' : '1px solid #cbd5e1',
+                  border: active ? '1px solid #1e40af' : '1px solid #e2e8f0',
                   backgroundColor: active ? '#1e40af' : '#f8fafc',
                   color: active ? '#ffffff' : '#334155',
-                  fontSize: '0.8rem',
+                  fontSize: '0.72rem',
                   fontWeight: 600,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                {area === 'all' ? `全域 (${count})` : `${area} (${count})`}
+                {area === 'all' ? `全域 ${count}` : `${area.replace(/[県道]$/, '')} ${count}`}
               </button>
             );
           })}
         </div>
 
-        {/* キーワード検索 ＆ 月フィルタ */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', flex: 1, justifyContent: 'flex-end' }}>
+        {/* 月フィルタ・検索・追加・リセット（横一列） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: '1 1 360px', justifyContent: 'flex-end', minWidth: 0 }}>
           <select
             value={selectedMonth}
             onChange={e => setSelectedMonth(e.target.value)}
             style={{
-              padding: '0.45rem 0.75rem',
-              borderRadius: '0.5rem',
+              padding: '0.25rem 0.4rem',
+              borderRadius: '0.4rem',
               border: '1px solid #cbd5e1',
-              fontSize: '0.85rem',
+              fontSize: '0.74rem',
               backgroundColor: '#f8fafc',
-              fontWeight: 600
+              fontWeight: 600,
+              flexShrink: 0
             }}
           >
-            <option value="all">📅 全期間 ({kpiStats.allActiveCount}件)</option>
+            <option value="all">📅 全期間 ({kpiStats.allActiveCount})</option>
             {Object.keys(kpiStats.byMonth)
               .sort((a, b) => b.localeCompare(a))
               .map(ym => {
                 const [y, m] = ym.split('-');
                 return (
                   <option key={ym} value={ym}>
-                    {y}年{parseInt(m, 10)}月反響 ({kpiStats.byMonth[ym]}件)
+                    {y}/{parseInt(m, 10)}月 ({kpiStats.byMonth[ym]})
                   </option>
                 );
               })}
           </select>
 
-          <div style={{ position: 'relative', minWidth: '220px' }}>
-            <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+          <div style={{ position: 'relative', flex: '1 1 140px', minWidth: '110px', maxWidth: '240px' }}>
+            <Search size={13} style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="クリニック名・市区町村・科目で検索..."
+              placeholder="名称・市区町村・科目"
               style={{
                 width: '100%',
-                padding: '0.45rem 0.75rem 0.45rem 2.2rem',
-                borderRadius: '0.5rem',
+                padding: '0.25rem 0.5rem 0.25rem 1.6rem',
+                borderRadius: '0.4rem',
                 border: '1px solid #cbd5e1',
-                fontSize: '0.85rem'
+                fontSize: '0.74rem'
               }}
             />
           </div>
 
           <button
             onClick={() => setIsPasteBoxOpen(prev => !prev)}
+            title="コピペで新規追加"
             style={{
-              padding: '0.5rem 0.95rem',
-              borderRadius: '0.55rem',
+              padding: '0.28rem 0.6rem',
+              borderRadius: '0.4rem',
               border: 'none',
               background: isPasteBoxOpen ? '#0f172a' : 'linear-gradient(135deg, #10b981, #059669)',
               color: '#ffffff',
-              fontSize: '0.84rem',
+              fontSize: '0.74rem',
               fontWeight: 800,
               display: 'flex',
               alignItems: 'center',
-              gap: '0.35rem',
+              gap: '0.2rem',
               cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+              whiteSpace: 'nowrap',
+              flexShrink: 0
             }}
           >
-            <Plus size={16} />
-            <span>{isPasteBoxOpen ? '閉じる' : '📋 コピペで新規追加'}</span>
+            <Plus size={13} />
+            <span>{isPasteBoxOpen ? '閉じる' : '新規追加'}</span>
           </button>
 
           <button
@@ -1536,21 +1537,20 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 triggerToast('🔄 名簿42件の初期データを再読み込みしました');
               }
             }}
-            title="名簿42件を初期状態に戻す"
+            title="名簿42件を初期状態に戻す（リセット）"
             style={{
-              padding: '0.45rem 0.75rem',
-              borderRadius: '0.5rem',
+              padding: '0.28rem 0.4rem',
+              borderRadius: '0.4rem',
               border: '1px solid #e2e8f0',
               backgroundColor: '#f8fafc',
               color: '#64748b',
-              fontSize: '0.8rem',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.3rem',
-              cursor: 'pointer'
+              cursor: 'pointer',
+              flexShrink: 0
             }}
           >
-            <RotateCcw size={14} /> リセット
+            <RotateCcw size={13} />
           </button>
         </div>
       </div>
