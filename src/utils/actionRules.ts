@@ -1,88 +1,49 @@
-import type { ProjectStatus, NextAction, ActionPriority, Project } from '../types';
-import { addDays, format } from 'date-fns';
+import {
+  getClinicTotalPoints,
+  isBtoBDealerProject,
+  normalizeProgressStage
+} from '../types';
+import type { ProjectStatus, NextAction, ActionPriority, Project, QuickCallOutcome } from '../types';
+import type { GlobalRule } from '../context/RuleContext';
+import { addDays, differenceInDays, format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
-
-type GeneratedActionInfo = {
-  title: string;
-  daysToDeadline: number;
-  ballHolder: string;
-  priority: ActionPriority;
-  memo: string;
-};
-
-// ステータス変更時のルール定義
-const statusChangeRules: Partial<Record<ProjectStatus, GeneratedActionInfo[]>> = {
-  '資料請求': [
-    { title: '初回連絡', daysToDeadline: 1, ballHolder: '自社営業', priority: '高', memo: '資料到着の確認とヒアリング' }
-  ],
-  'アポイント取得': [
-    { title: '商談準備', daysToDeadline: 1, ballHolder: '自社営業', priority: '中', memo: '提案資料・ヒアリングシートの準備' }
-  ],
-  '商談': [
-    { title: 'ヒアリングシート整理', daysToDeadline: 0, ballHolder: '自社営業', priority: '高', memo: '商談内容のまとめと次のステップ検討' }
-  ],
-  '見積作成': [
-    { title: '見積書作成・社内承認', daysToDeadline: 3, ballHolder: '自社営業', priority: '高', memo: '見積書作成後、上長承認' }
-  ],
-  '見積提出': [
-    { title: '見積フォロー電話', daysToDeadline: 3, ballHolder: '自社営業', priority: '高', memo: '見積提出後の状況確認' }
-  ],
-  '検討中': [
-    { title: '状況確認フォロー', daysToDeadline: 7, ballHolder: '自社営業', priority: '中', memo: '検討状況の定期フォロー' }
-  ],
-  '契約': [
-    { title: 'キャッシュレス申込案内', daysToDeadline: 3, ballHolder: 'お客様', priority: '高', memo: 'お客様へ申込URLと必要書類の案内' },
-    { title: '本体カラー確認', daysToDeadline: 3, ballHolder: 'お客様', priority: '高', memo: 'カラーバリエーションの案内と確定' },
-    { title: '現地調査 日程調整', daysToDeadline: 3, ballHolder: 'お客様', priority: '高', memo: '現調希望日のヒアリング' }
-  ]
-};
-
-// タスク完了時のルール定義（特定のタスクが終わったら次を生成する）
-const taskCompletionRules: Record<string, GeneratedActionInfo[]> = {
-  '初回連絡': [
-    { title: '再連絡', daysToDeadline: 3, ballHolder: '自社営業', priority: '中', memo: 'アポが取れていない場合の再フォロー' }
-  ],
-  '現地調査 日程調整': [
-    { title: '現地調査実施', daysToDeadline: 7, ballHolder: '現調担当', priority: '高', memo: '現地調査の実施' }
-  ],
-  '現地調査実施': [
-    { title: '設置条件確認・設置日確定', daysToDeadline: 3, ballHolder: '自社営業', priority: '高', memo: '現調結果に基づく設置日調整' }
-  ],
-  '設置条件確認・設置日確定': [
-    { title: '設置準備（機器手配）', daysToDeadline: 7, ballHolder: '設置担当', priority: '高', memo: '機器の出荷準備・手配' }
-  ],
-  '設置準備（機器手配）': [
-    { title: 'キャッシュレス設定・動作確認', daysToDeadline: 0, ballHolder: '設置担当', priority: '高', memo: '設置当日の設定作業' }
-  ],
-  'キャッシュレス設定・動作確認': [
-    { title: '操作説明・引渡し', daysToDeadline: 0, ballHolder: '設置担当', priority: '高', memo: 'クリニックスタッフへの説明' }
-  ],
-  '操作説明・引渡し': [
-    { title: '導入事例写真の確認・完了処理', daysToDeadline: 3, ballHolder: '自社営業', priority: '中', memo: '導入事例掲載のお願いなど' }
-  ]
-};
 
 /**
  * 期限日付を計算してISO文字列で返す
  */
-const calculateDeadline = (days: number): string => {
-  return format(addDays(new Date(), days), 'yyyy-MM-dd');
+const calculateDeadline = (days: number, baseDateStr?: string): string => {
+  const base = baseDateStr ? new Date(baseDateStr) : new Date();
+  const validBase = isNaN(base.getTime()) ? new Date() : base;
+  return format(addDays(validBase, days), 'yyyy-MM-dd');
 };
 
 /**
  * GlobalRuleからNextActionオブジェクトを生成する
  */
-export const createActionFromGlobalRule = (project: Project, rule: any): NextAction => {
+export const createActionFromGlobalRule = (
+  project: Project,
+  rule: GlobalRule,
+  baseDateStr?: string
+): NextAction => {
+  const assignee =
+    !rule.actionAssignee || rule.actionAssignee === '自社営業'
+      ? project.salesRep || '松浦 貴文'
+      : rule.actionAssignee;
+
+  const hintSuffix = rule.aiDraftHint
+    ? ` [💡AIメール推奨: ${rule.aiDraftHint}]`
+    : '';
+
   return {
     id: uuidv4(),
     projectId: project.id,
     title: rule.actionTitle,
-    assignee: rule.actionAssignee === '自社営業' ? project.salesRep : rule.actionAssignee,
-    deadline: calculateDeadline(rule.actionDaysToDeadline),
-    priority: rule.actionPriority,
+    assignee,
+    deadline: calculateDeadline(rule.actionDaysToDeadline ?? 1, baseDateStr),
+    priority: rule.actionPriority || '高',
     status: '未完了',
-    memo: rule.actionMemo,
-    createdAt: new Date().toISOString()
+    memo: `${rule.actionMemo || ''}${hintSuffix}`,
+    createdAt: format(new Date(), 'yyyy-MM-dd')
   };
 };
 
@@ -96,67 +57,205 @@ export const createDynamicAction = (project: Project, rule: any): NextAction => 
     priority: '中',
     status: '未完了',
     memo: 'ワークフロー自動生成',
-    createdAt: new Date().toISOString()
+    createdAt: format(new Date(), 'yyyy-MM-dd')
   };
 };
 
-const evaluateRuleCondition = (project: Project, rule: any): boolean => {
+/**
+ * ルールのターゲット枠（クリニック直販枠 / BtoBディーラー別枠）およびAND条件を判定する
+ */
+export const evaluateRuleCondition = (project: Project, rule: GlobalRule): boolean => {
+  // 1. クリニック直販枠 vs BtoBディーラー別枠 フィルタ
+  if (rule.targetSegment === 'clinic_only' && isBtoBDealerProject(project)) {
+    return false;
+  }
+  if (rule.targetSegment === 'btob_only' && !isBtoBDealerProject(project)) {
+    return false;
+  }
+
+  // 2. 追加AND条件
   if (!rule.conditionField) return true;
 
   let projectValue = '';
-  // `project` オブジェクト直下の項目か、`pipelineMap` 内の項目かを自動判定して取得
-  if (rule.conditionField in project) {
+  if (rule.conditionField === 'status') {
+    projectValue = project.status === '失注' ? '失注' : normalizeProgressStage(project);
+  } else if (rule.conditionField === 'clinicPoints') {
+    projectValue = String(getClinicTotalPoints(project));
+  } else if (rule.conditionField in project) {
     projectValue = String((project as any)[rule.conditionField] || '');
   } else if (project.pipelineMap && rule.conditionField in project.pipelineMap) {
     projectValue = String((project.pipelineMap as any)[rule.conditionField] || '');
   }
 
   const targetValue = rule.conditionValue || '';
+  const op = rule.conditionOperator || 'equals';
 
-  if (rule.conditionOperator === 'equals') {
+  if (op === 'equals') {
     return projectValue === targetValue;
-  } else if (rule.conditionOperator === 'not_equals') {
+  }
+  if (op === 'not_equals') {
     return projectValue !== targetValue;
+  }
+  if (op === 'contains') {
+    return projectValue.toLowerCase().includes(targetValue.toLowerCase());
+  }
+  if (op === 'gte') {
+    return Number(projectValue) >= Number(targetValue);
   }
 
   return true;
 };
 
 /**
+ * 超かんたん司令室のワンクリックアクション実行時（またはポイント到達時）に発火するルールを評価
+ */
+export const evaluateRulesOnQuickAction = (
+  project: Project,
+  callOutcome: QuickCallOutcome,
+  nextClinicPts: number,
+  rules: GlobalRule[],
+  actionDate?: string
+): {
+  matchedRule: GlobalRule;
+  nextAction: NextAction;
+  nextStage?: string;
+  autoProbability?: 'A' | 'B' | 'C';
+} | null => {
+  // 1) アクション直接トリガー (`action_recorded`)
+  const actionRule = rules.find(
+    r =>
+      r.isActive &&
+      r.triggerType === 'action_recorded' &&
+      r.triggerValue === callOutcome &&
+      evaluateRuleCondition(project, r)
+  );
+
+  // 2) ポイント到達トリガー (`points_reached`)
+  const prevPts = getClinicTotalPoints(project);
+  const pointRule = rules.find(r => {
+    if (!r.isActive || r.triggerType !== 'points_reached') return false;
+    const threshold = parseInt(r.triggerValue, 10);
+    if (isNaN(threshold)) return false;
+    return prevPts < threshold && nextClinicPts >= threshold && evaluateRuleCondition(project, r);
+  });
+
+  const chosenRule = pointRule || actionRule;
+  if (!chosenRule) return null;
+
+  return {
+    matchedRule: chosenRule,
+    nextAction: createActionFromGlobalRule(project, chosenRule, actionDate),
+    nextStage: chosenRule.nextStage,
+    autoProbability: chosenRule.autoProbability
+  };
+};
+
+/**
+ * 現在の全案件リストに対して、指定したルールに今すぐ合致している案件をスキャンする（シミュレーター＆一括適用用）
+ */
+export const scanMatchingProjectsForRule = (
+  projects: Project[],
+  rule: GlobalRule
+): Project[] => {
+  return projects.filter(p => {
+    if (!evaluateRuleCondition(p, rule)) return false;
+
+    if (rule.triggerType === 'lost_archived') {
+      if (p.status !== '失注') return false;
+      return (p.lostReason || '').includes(rule.triggerValue);
+    }
+
+    // 失注以外の営業中案件を対象
+    if (p.status === '失注') return false;
+
+    const stage = normalizeProgressStage(p);
+    const pts = getClinicTotalPoints(p);
+    const memo = p.memo || '';
+
+    if (rule.triggerType === 'status_changed') {
+      return stage === rule.triggerValue || p.status === rule.triggerValue;
+    }
+
+    if (rule.triggerType === 'points_reached') {
+      const threshold = parseInt(rule.triggerValue, 10) || 10;
+      return pts >= threshold && stage !== '受注';
+    }
+
+    if (rule.triggerType === 'stagnant_days') {
+      const minDays = parseInt(rule.triggerValue, 10) || 5;
+      const diff = differenceInDays(new Date(), new Date(p.lastActivityAt || p.receivedAt || new Date()));
+      return diff >= minDays && stage !== '受注';
+    }
+
+    if (rule.triggerType === 'action_recorded') {
+      const tv = rule.triggerValue;
+      if (tv === '初動メール') return !!(p.initialEmailDate || memo.includes('初動メール済') || memo.includes('〇メール済'));
+      if (tv === '見積書送付') return !!(p.estimateSentDate || memo.includes('見積書送付済'));
+      if (tv === 'オンラインデモ' || tv === '訪問デモ' || tv === '来社デモ') {
+        return p.demoType === tv || memo.includes(tv);
+      }
+      if (tv === '訪問') return !!(p.visitDate || memo.includes('訪問済'));
+      if (tv === 'ポスティング') return !!(p.postingDate || memo.includes('ポスティング済'));
+      if (tv === '相談メール') return !!(p.consultEmailDate || memo.includes('相談メール済'));
+      if (tv === '後追いメール') return !!(p.followupEmailDate || memo.includes('後追いメール済'));
+      if (tv === '受注') return !!(p.orderDate || stage === '受注' || memo.includes('受注済'));
+      if (tv === '会話') return memo.includes('架電状況: 会話');
+      if (tv === '不在') return memo.includes('架電状況: 不在');
+      if (tv === '折返待ち') return memo.includes('架電状況: 折返待ち');
+    }
+
+    return false;
+  });
+};
+
+/**
  * ステータス変更時に発火するルールエンジン
  */
-export const generateActionsOnStatusChange = (project: Project, newStatus: ProjectStatus, rules: any[]): { newActions: NextAction[], nextBallHolder: string } | null => {
-  const activeRules = rules.filter(r => 
-    r.isActive && 
-    r.triggerType === 'status_changed' && 
-    r.triggerValue === newStatus &&
-    evaluateRuleCondition(project, r)
+export const generateActionsOnStatusChange = (
+  project: Project,
+  newStatus: ProjectStatus,
+  rules: GlobalRule[]
+): { newActions: NextAction[]; nextBallHolder: string } | null => {
+  const activeRules = rules.filter(
+    r =>
+      r.isActive &&
+      r.triggerType === 'status_changed' &&
+      r.triggerValue === newStatus &&
+      evaluateRuleCondition(project, r)
   );
   if (activeRules.length === 0) return null;
 
   const newActions = activeRules.map(rule => createActionFromGlobalRule(project, rule));
-  
-  // ボール保持者は最初に生成されるアクションのものを優先
-  const nextBallHolder = activeRules[0].actionAssignee === '自社営業' ? project.salesRep : activeRules[0].actionAssignee;
-  
+  const nextBallHolder =
+    activeRules[0].actionAssignee === '自社営業'
+      ? project.salesRep
+      : activeRules[0].actionAssignee;
+
   return { newActions, nextBallHolder };
 };
 
 /**
  * タスク完了時に発火するルールエンジン
  */
-export const generateActionsOnTaskCompletion = (project: Project, completedTaskTitle: string, rules: any[]): { newActions: NextAction[], nextBallHolder: string } | null => {
-  const activeRules = rules.filter(r => 
-    r.isActive && 
-    r.triggerType === 'task_completed' && 
-    r.triggerValue === completedTaskTitle &&
-    evaluateRuleCondition(project, r)
+export const generateActionsOnTaskCompletion = (
+  project: Project,
+  completedTaskTitle: string,
+  rules: GlobalRule[]
+): { newActions: NextAction[]; nextBallHolder: string } | null => {
+  const activeRules = rules.filter(
+    r =>
+      r.isActive &&
+      r.triggerType === 'task_completed' &&
+      r.triggerValue === completedTaskTitle &&
+      evaluateRuleCondition(project, r)
   );
   if (activeRules.length === 0) return null;
 
   const newActions = activeRules.map(rule => createActionFromGlobalRule(project, rule));
-  
-  const nextBallHolder = activeRules[0].actionAssignee === '自社営業' ? project.salesRep : activeRules[0].actionAssignee;
+  const nextBallHolder =
+    activeRules[0].actionAssignee === '自社営業'
+      ? project.salesRep
+      : activeRules[0].actionAssignee;
 
   return { newActions, nextBallHolder };
 };

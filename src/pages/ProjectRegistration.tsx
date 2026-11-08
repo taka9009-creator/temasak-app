@@ -6,16 +6,30 @@ import { useWorkflow } from '../context/WorkflowContext';
 import type { Project, NextAction, ActionPriority } from '../types';
 import { CheckCircle2, AlertTriangle, UserPlus, Calendar, CheckSquare, Sparkles, ArrowRight, Mic } from 'lucide-react';
 import VoiceActionModal from '../components/VoiceActionModal';
+import { parsePastedRosterText, convertParsedLeadsToProjects } from '../utils/roster42Data';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function ProjectRegistration() {
-  const { addProject, projects } = useProjects();
+  const { addProject, addProjectsBulk, projects } = useProjects();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { kanbanColumns } = useWorkflow();
 
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [pasteRawText, setPasteRawText] = useState('');
+  const parsedPasteList = React.useMemo(() => {
+    if (!pasteRawText.trim()) return [];
+    return parsePastedRosterText(pasteRawText);
+  }, [pasteRawText]);
+
+  const handleBulkPasteRegister = () => {
+    if (parsedPasteList.length === 0) return;
+    const { projects: newProjs, actions: newActs } = convertParsedLeadsToProjects(parsedPasteList);
+    addProjectsBulk(newProjs, newActs);
+    alert(`コピペから ${newProjs.length} 件の新規案件を一括登録しました！`);
+    navigate('/');
+  };
 
   const defaultRep = user?.name || '松浦 貴文';
   const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -272,6 +286,93 @@ export default function ProjectRegistration() {
           }));
         }}
       />
+
+      {/* 📋 コピペ一括入力セクション（反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)） */}
+      <section className="card" style={{
+        padding: '1.25rem 1.5rem',
+        borderRadius: '0.85rem',
+        marginBottom: '1.5rem',
+        backgroundColor: '#f0fdf4',
+        border: '2px solid #10b981'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#065f46' }}>
+            📋 コピペで一瞬登録（「反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)」を貼るだけ）
+          </h3>
+          <button
+            type="button"
+            onClick={() => setPasteRawText('2026-11-07 / 医療法人さくら歯科クリニック / 北海道札幌市中央区 / 松浦')}
+            style={{
+              padding: '0.3rem 0.65rem',
+              borderRadius: '0.4rem',
+              border: '1px solid #34d399',
+              backgroundColor: '#ffffff',
+              color: '#047857',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >
+            💡 サンプル貼付
+          </button>
+        </div>
+
+        <p style={{ margin: '0 0 0.65rem 0', fontSize: '0.8rem', color: '#047857' }}>
+          Excel・スプレッドシートの行や、スラッシュ区切りのテキストを複数行まとめて貼り付けできます。
+        </p>
+
+        <textarea
+          rows={3}
+          value={pasteRawText}
+          onChange={e => setPasteRawText(e.target.value)}
+          placeholder={`例1: 2026-11-07 / おおぞら内科クリニック / 北海道札幌市北区 / 松浦\n例2: 2026-11-07\tみなみ歯科医院\t福島県\t郡山市\t松浦`}
+          style={{
+            width: '100%',
+            padding: '0.65rem',
+            borderRadius: '0.5rem',
+            border: '1px solid #34d399',
+            fontSize: '0.85rem',
+            fontFamily: 'monospace',
+            backgroundColor: '#ffffff',
+            marginBottom: '0.65rem'
+          }}
+        />
+
+        {parsedPasteList.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#065f46' }}>
+              🔍 認識プレビュー ({parsedPasteList.length}件):
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', maxHeight: '120px', overflowY: 'auto' }}>
+              {parsedPasteList.map(item => (
+                <div key={item.id} style={{ backgroundColor: '#ffffff', padding: '0.35rem 0.65rem', borderRadius: '0.35rem', border: '1px solid #a7f3d0', fontSize: '0.8rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <span>📅 {item.receivedDate}</span>
+                  <strong>🏥 {item.clinicName}</strong>
+                  <span style={{ color: '#1d4ed8' }}>📍 {item.address}</span>
+                  <span style={{ marginLeft: 'auto', fontWeight: 700, color: '#047857' }}>👤 {item.salesRep}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handleBulkPasteRegister}
+              style={{
+                width: '100%',
+                padding: '0.65rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: '#059669',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '0.92rem',
+                cursor: 'pointer'
+              }}
+            >
+              ✅ この {parsedPasteList.length} 件をワンクリックで登録する
+            </button>
+          </div>
+        )}
+      </section>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
         

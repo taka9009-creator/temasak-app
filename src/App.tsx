@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import TopHeader from './components/TopHeader';
 import ToastContainer from './components/ToastContainer';
+import AllInOneSalesOS from './pages/AllInOneSalesOS';
 import Dashboard from './pages/Dashboard';
 import ProjectManagement from './pages/ProjectManagement';
 import ProjectRegistration from './pages/ProjectRegistration';
@@ -20,25 +21,11 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { EmailProvider } from './context/EmailContext';
 import Login from './pages/Login';
 
-// メール配信関連ページ
-import EmailDashboard from './pages/EmailMarketing/EmailDashboard';
-import EmailComposeWizard from './pages/EmailMarketing/EmailComposeWizard';
-import EmailHistory from './pages/EmailMarketing/EmailHistory';
-import EmailTemplates from './pages/EmailMarketing/EmailTemplates';
-import EmailOptOuts from './pages/EmailMarketing/EmailOptOuts';
-
-import KnowledgeManagement from './pages/KnowledgeManagement';
-import KnowledgeBrowser from './pages/KnowledgeBrowser';
-
 // Helper component for protected routes
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   
   if (!isAuthenticated) {
-    // Redirect to login if not authenticated
-    // Note: React Router's Navigate would be cleaner, but window.location works as a simple fallback
-    // Actually, we can just render the Login component directly or use Navigate from react-router-dom
-    // We'll import Navigate at the top
     return <Navigate to="/login" replace />;
   }
   
@@ -51,24 +38,15 @@ function MainLayout({ isSidebarOpen, setIsSidebarOpen }: { isSidebarOpen: boolea
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <main className="main-content" style={{ flex: 1, overflowY: 'auto', padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <TopHeader onMenuClick={() => setIsSidebarOpen(true)} />
-        <div style={{ padding: '2rem', flex: 1 }}>
+        <div style={{ padding: '1.5rem 2rem', flex: 1 }}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            {/* 超かんたん統合オールインワン画面（デフォルト） */}
+            <Route path="/" element={<AllInOneSalesOS />} />
+            <Route path="/classic-dashboard" element={<Dashboard />} />
             <Route path="/projects/new" element={<ProjectRegistration />} />
             <Route path="/projects" element={<ProjectManagement />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />
-            
-            {/* ナレッジ・ドキュメント取込 ＆ 辞書ブラウザ */}
-            <Route path="/knowledge" element={<KnowledgeManagement />} />
-            <Route path="/knowledge/browser" element={<KnowledgeBrowser />} />
-            
-            {/* メール配信関連ルート */}
-            <Route path="/email" element={<EmailDashboard />} />
-            <Route path="/email/compose" element={<EmailComposeWizard />} />
-            <Route path="/email/history" element={<EmailHistory />} />
-            <Route path="/email/templates" element={<EmailTemplates />} />
-            <Route path="/email/optouts" element={<EmailOptOuts />} />
           </Routes>
         </div>
       </main>
@@ -82,34 +60,33 @@ function App() {
   return (
     <AuthProvider>
       <RuleProvider>
-      <WorkflowProvider>
-        <MasterDataProvider>
-          <ProjectProvider>
-            <EmailProvider>
-              <NotificationProvider>
-                <BrowserRouter>
-                  <Routes>
-                    <Route path="/login" element={<Login />} />
-                    <Route 
-                      path="/*" 
-                      element={
-                        <ProtectedRoute>
-                          <MainLayout isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
-                        </ProtectedRoute>
-                      } 
-                    />
-                  </Routes>
-                  <ToastContainer />
-                </BrowserRouter>
-              </NotificationProvider>
-            </EmailProvider>
-          </ProjectProvider>
-        </MasterDataProvider>
-      </WorkflowProvider>
+        <WorkflowProvider>
+          <MasterDataProvider>
+            <ProjectProvider>
+              <EmailProvider>
+                <NotificationProvider>
+                  <BrowserRouter>
+                    <Routes>
+                      <Route path="/login" element={<Login />} />
+                      <Route 
+                        path="/*" 
+                        element={
+                          <ProtectedRoute>
+                            <MainLayout isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen} />
+                          </ProtectedRoute>
+                        } 
+                      />
+                    </Routes>
+                    <ToastContainer />
+                  </BrowserRouter>
+                </NotificationProvider>
+              </EmailProvider>
+            </ProjectProvider>
+          </MasterDataProvider>
+        </WorkflowProvider>
       </RuleProvider>
     </AuthProvider>
   );
 }
 
 export default App;
-

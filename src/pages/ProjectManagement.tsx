@@ -6,9 +6,10 @@ import ProjectCalendar from '../components/ProjectCalendar';
 import { useProjects } from '../context/ProjectContext';
 import { LayoutList, KanbanSquare, Archive, CalendarDays, Search, X } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
+import type { LostReasonType } from '../types';
 
 export default function ProjectManagement() {
-  const { projects, actions, handleStatusChange, handleCompleteAction, updateProject, postponeAction } = useProjects();
+  const { projects, actions, handleStatusChange, archiveProjectAsLost, handleCompleteAction, updateProject, postponeAction } = useProjects();
   const { kanbanColumns } = useWorkflow();
   
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'archive' | 'calendar'>('list');
@@ -17,10 +18,11 @@ export default function ProjectManagement() {
 
   // 失注モーダル用ステート
   const [lostModalProjectId, setLostModalProjectId] = useState<string | null>(null);
-  const [lostReason, setLostReason] = useState<string>('');
+  const [lostReason, setLostReason] = useState<LostReasonType>('他社導入');
 
   const handleStatusChangeIntercept = (projectId: string, newStatus: string) => {
     if (newStatus === '失注') {
+      setLostReason('他社導入');
       setLostModalProjectId(projectId);
     } else {
       handleStatusChange(projectId, newStatus);
@@ -29,10 +31,8 @@ export default function ProjectManagement() {
 
   const submitLostReason = () => {
     if (!lostModalProjectId) return;
-    updateProject(lostModalProjectId, { lostReason: lostReason || 'その他' });
-    handleStatusChange(lostModalProjectId, '失注');
+    archiveProjectAsLost(lostModalProjectId, lostReason);
     setLostModalProjectId(null);
-    setLostReason('');
   };
 
   // 検索フィルタリング
@@ -91,12 +91,12 @@ export default function ProjectManagement() {
               style={{ minHeight: '44px', padding: '0.5rem 1rem', border: 'none', background: viewMode === 'archive' ? 'var(--primary)' : 'transparent', color: viewMode === 'archive' ? 'white' : 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, fontSize: '0.875rem' }}
               onClick={() => setViewMode('archive')}
             >
-              <Archive size={16} /> アーカイブ
+              <Archive size={16} /> アーカイブ（失注）
             </button>
           </div>
         </div>
 
-        {/* 検索バー（クリニック名・担当者） */}
+        {/* 検索バー */}
         <div style={{ position: 'relative', width: '100%', maxWidth: '500px' }}>
           <Search size={18} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
           <input 
@@ -175,26 +175,26 @@ export default function ProjectManagement() {
 
       {lostModalProjectId && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div className="card" style={{ padding: '2rem', width: '400px', backgroundColor: 'var(--card-bg)' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--danger)' }}>失注理由の登録</h3>
+          <div className="card" style={{ padding: '2rem', width: '420px', backgroundColor: 'var(--card-bg)' }}>
+            <h3 style={{ marginBottom: '0.75rem', color: 'var(--danger)' }}>アーカイブ（失注）へ移動</h3>
             <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
-              今後の分析と改善のため、失注の主な理由を選択してください。半年後に状況確認のタスクが自動で生成されます。
+              失注の理由を選択してください。半年後に状況確認のタスクが自動で生成されます。
             </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-              <select className="input-field" value={lostReason} onChange={e => setLostReason(e.target.value)}>
-                <option value="">選択してください...</option>
-                <option value="金額が高い">金額が高い</option>
-                <option value="他社競合（製品力）">他社競合（製品力）</option>
-                <option value="他社競合（価格）">他社競合（価格）</option>
-                <option value="時期尚早">時期尚早</option>
-                <option value="連絡がつかない">連絡がつかない</option>
-                <option value="その他">その他</option>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
+              <select
+                className="input-field"
+                value={lostReason}
+                onChange={e => setLostReason(e.target.value as LostReasonType)}
+              >
+                <option value="他社導入">🏢 他社導入</option>
+                <option value="金銭面">💰 金銭面</option>
+                <option value="その他">📝 その他</option>
               </select>
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
               <button className="btn btn-outline" onClick={() => setLostModalProjectId(null)}>キャンセル</button>
-              <button className="btn btn-primary" onClick={submitLostReason} disabled={!lostReason} style={{ backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: 'white' }}>
-                失注として確定する
+              <button className="btn btn-primary" onClick={submitLostReason} style={{ backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: 'white' }}>
+                アーカイブ（失注）へ移動
               </button>
             </div>
           </div>

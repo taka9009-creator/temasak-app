@@ -1,7 +1,8 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { LayoutDashboard, Settings, UserPlus, Briefcase, X, Mail, BookOpen, Award } from 'lucide-react';
+import { useProjects } from '../context/ProjectContext';
+import { Zap, LayoutDashboard, Settings, UserPlus, Briefcase, X, BarChart3 } from 'lucide-react';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const { projects } = useProjects();
 
   const handleLogout = () => {
     logout();
@@ -32,7 +34,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <img src="/app-icon.png" alt="Temasak App Icon" style={{ width: '36px', height: '36px', borderRadius: '10px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)', objectFit: 'cover' }} />
-            <h1 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 700, letterSpacing: '-0.02em' }}>テマサック管理</h1>
+            <div>
+              <h1 style={{ fontSize: '1.15rem', margin: 0, fontWeight: 800, letterSpacing: '-0.02em' }}>テマサック営業OS</h1>
+              <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>KPI・案件・AIナレッジ統合</div>
+            </div>
           </div>
           <button className="mobile-close-btn" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#fff', display: 'none' }}>
             <X size={24} />
@@ -41,28 +46,24 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose} end>
-            <LayoutDashboard size={20} />
-            <span>ダッシュボード</span>
-          </NavLink>
-          <NavLink to="/projects/new" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
-            <UserPlus size={20} />
-            <span>新規案件登録</span>
+            <Zap size={20} color="#fbbf24" />
+            <span style={{ fontWeight: 700 }}>⚡ 超かんたん司令室 ({projects.length}件)</span>
           </NavLink>
           <NavLink to="/projects" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose} end>
             <Briefcase size={20} />
-            <span>案件管理</span>
+            <span>案件カンバン・カレンダー</span>
           </NavLink>
-          <NavLink to="/email" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
-            <Mail size={20} />
-            <span>メール配信</span>
+          <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
+            <BarChart3 size={20} />
+            <span>KPI・ファネル分析</span>
           </NavLink>
-          <NavLink to="/knowledge/browser" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
-            <Award size={20} />
-            <span>ナレッジ辞書</span>
+          <NavLink to="/projects/new" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
+            <UserPlus size={20} />
+            <span>新規案件の追加</span>
           </NavLink>
-          <NavLink to="/knowledge" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
-            <BookOpen size={20} />
-            <span>ナレッジ・取込</span>
+          <NavLink to="/classic-dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
+            <LayoutDashboard size={20} />
+            <span>旧ダッシュボード</span>
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} onClick={onClose}>
             <Settings size={20} />
@@ -77,7 +78,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
         <div>
           <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f8fafc' }}>{user?.name || '松浦 貴文'}</div>
-          <div style={{ fontSize: '0.75rem' }}>{user?.role === 'admin' ? '管理者' : '営業担当'}</div>
+          <div style={{ fontSize: '0.75rem' }}>{user?.role === 'admin' ? '北海道・東北 統括担当' : '営業担当'}</div>
         </div>
       </div>
     </>

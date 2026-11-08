@@ -24,24 +24,28 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const DEFAULT_MATSUURA_USER: User = {
+  id: 'demo-user-1',
+  name: '松浦 貴文',
+  role: 'admin',
+  email: 'matsuura@temasak.jp'
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [user, setUser] = useState<User | null>(DEFAULT_MATSUURA_USER);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [isInitializing, setIsInitializing] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser: FirebaseUser | null) => {
       if (fbUser) {
         setUser({
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'User',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || '松浦 貴文',
           role: 'admin',
           email: fbUser.email || ''
         });
         setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
       }
       setIsInitializing(false);
     });
@@ -64,12 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const demoLogin = () => {
-    setUser({
-      id: 'demo-user-1',
-      name: '松浦 貴文',
-      role: 'admin',
-      email: 'matsuura@temasak.jp'
-    });
+    setUser(DEFAULT_MATSUURA_USER);
     setIsAuthenticated(true);
   };
 
@@ -101,4 +100,3 @@ export function useAuth() {
   }
   return context;
 }
-

@@ -1,38 +1,21 @@
 import React from 'react';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { SALES_PROGRESS_FLOW, normalizeProgressStage } from '../../types';
 import type { Project } from '../../types';
 
-const steps = [
-  { id: '1', label: '新規・問合せ' },
-  { id: '3', label: '商談・デモ' },
-  { id: '4', label: '見積作成' },
-  { id: '6', label: '契約・導入準備' },
-  { id: '9', label: 'CL・補助金' },
-  { id: '11', label: '現地調査' },
-  { id: '12', label: '設置・完了' }
-];
+const steps = SALES_PROGRESS_FLOW.map((label, idx) => ({
+  id: String(idx + 1),
+  label
+}));
 
 interface Props {
   project: Project;
 }
 
 export default function ProjectProgressMap({ project }: Props) {
-  const getCurrentNodeId = (status: string) => {
-    if (status === '新規' || status === '問合せ') return '1';
-    if (status === '初動' || status === 'デモ' || status === '商談') return '3';
-    if (status === '概算見積' || status === '見積' || status === '見積提出') return '4';
-    if (status === '受注' || status === '契約' || status === '楽々報告' || status === '契約確認') return '6';
-    if (status === 'CL希望' || status === 'キャッシュレス申込' || status === 'キャッシュレス設定' || status === 'キャッシュレス導入準備') return '9';
-    if (status === '現地調査' || status === '現地調査日程調整') return '11';
-    if (status === '設置日' || status === '設置準備' || status === '設置日調整' || status === '本番稼働' || status === '完了') return '12';
-    if (status === '失注') return 'lost';
-    return '1';
-  };
-
-  const currentNodeId = getCurrentNodeId(project.status);
-  const isLost = currentNodeId === 'lost';
-  
-  const currentIndex = steps.findIndex(s => s.id === currentNodeId);
+  const isLost = project.status === '失注';
+  const normalizedStage = normalizeProgressStage(project);
+  const currentIndex = SALES_PROGRESS_FLOW.indexOf(normalizedStage);
 
   return (
     <div style={{ padding: '2rem 1rem', overflowX: 'auto', backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid var(--border-color)', marginBottom: '1.5rem' }}>
