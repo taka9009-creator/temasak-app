@@ -54,6 +54,8 @@ interface ProjectContextType {
   restoreArchivedProject: (projectId: string) => void;
   applyRuleToMatchingProjects: (rule: GlobalRule) => number;
   resetToRoster42: () => void;
+  syncLocalToCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
+  isCloudSyncing: boolean;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
@@ -88,6 +90,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const { getRulesForStatus, kanbanColumns } = useWorkflow();
   const { rules } = useRules();
   const { user } = useAuth();
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
 
   // Save to LocalStorage whenever projects or actions change
   useEffect(() => {
@@ -112,34 +115,35 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const projectsQuery = query(collection(db, 'projects'), where('user_id', '==', user.id));
+    const projectsQuery = query(collection(db, 'projects'));
     const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
       if (snapshot.empty) return;
       const loadedProjects: Project[] = snapshot.docs.map(docSnap => {
         const p = docSnap.data();
         return {
           id: docSnap.id,
-          clinicName: p.clinic_name || '',
-          clinicType: p.clinic_type || '',
+          clinicName: p.clinicName || p.clinic_name || '',
+          clinicType: p.clinicType || p.clinic_type || '',
           address: p.address || '',
           phone: p.phone || '',
           email: p.email || '',
-          contactPerson: p.contact_person || '',
-          contactTitle: p.contact_title || '',
+          contactPerson: p.contactPerson || p.contact_person || '',
+          contactTitle: p.contactTitle || p.contact_title || '',
           source: p.source || '',
-          receivedAt: p.received_at || p.created_at || new Date().toISOString(),
+          sourceDetail: p.sourceDetail,
+          receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
           product: p.product || 'テマサック自動精算機',
           quantity: p.quantity || 1,
           priority: (p.priority as ActionPriority) || '中',
           status: p.status || '新規',
-          salesRep: p.sales_rep || '松浦 貴文',
-          ballHolder: p.ball_holder || '松浦 貴文',
-          lastActivityAt: p.last_activity_at || p.created_at || new Date().toISOString(),
+          salesRep: p.salesRep || p.sales_rep || '松浦 貴文',
+          ballHolder: p.ballHolder || p.ball_holder || '松浦 貴文',
+          lastActivityAt: p.lastActivityAt || p.last_activity_at || p.created_at || new Date().toISOString(),
           probability: p.probability as any,
           memo: p.memo || '',
-          lostReason: p.lost_reason,
-          isImplementationProject: !!p.is_implementation_project,
-          pipelineMap: {
+          lostReason: p.lostReason || p.lost_reason,
+          isImplementationProject: !!(p.isImplementationProject ?? p.is_implementation_project),
+          pipelineMap: p.pipelineMap || {
             deviceType: p.device_type,
             bodyColor: p.body_color,
             subsidyName: p.subsidy_name,
@@ -147,9 +151,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             emoneyStatus: p.emoney_status,
             qrStatus: p.qr_status,
           },
-          installationDate: p.installation_date,
-          createdAt: p.created_at || new Date().toISOString(),
-          updatedAt: p.updated_at || new Date().toISOString(),
+          clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
+          initialEmailDate: p.initialEmailDate,
+          estimateSentDate: p.estimateSentDate,
+          demoType: p.demoType,
+          demoDate: p.demoDate,
+          visitDate: p.visitDate,
+          postingDate: p.postingDate,
+          consultEmailDate: p.consultEmailDate,
+          followupEmailDate: p.followupEmailDate,
+          orderDate: p.orderDate,
+          clinicHours: p.clinicHours,
+          closedDays: p.closedDays,
+          websiteUrl: p.websiteUrl,
+          reservationSystem: p.reservationSystem,
+          activities: Array.isArray(p.activities) ? p.activities : [],
+          installationDate: p.installationDate || p.installation_date,
+          createdAt: p.createdAt || p.created_at || new Date().toISOString(),
+          updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
         };
       });
       setProjects(loadedProjects);
@@ -157,22 +176,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       console.error('Firestore projects error:', error);
     });
 
-    const actionsQuery = query(collection(db, 'actions'), where('user_id', '==', user.id));
+    const actionsQuery = query(collection(db, 'actions'));
     const unsubscribeActions = onSnapshot(actionsQuery, (snapshot) => {
       if (snapshot.empty) return;
       const loadedActions: NextAction[] = snapshot.docs.map(docSnap => {
         const a = docSnap.data();
         return {
           id: docSnap.id,
-          projectId: a.project_id || '',
+          projectId: a.projectId || a.project_id || '',
           title: a.title || '',
           status: a.status || '未完了',
           deadline: a.deadline || '',
           assignee: a.assignee || '',
           priority: a.priority || '中',
           memo: a.memo || '',
-          completedAt: a.completed_at,
-          createdAt: a.created_at || new Date().toISOString()
+          completedAt: a.completedAt || a.completed_at,
+          createdAt: a.createdAt || a.created_at || new Date().toISOString()
         };
       });
       setActions(loadedActions);
@@ -185,6 +204,61 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       unsubscribeActions();
     };
   }, [user]);
+
+  const saveProjectToFirestore = async (proj: Project) => {
+    if (!user || user.id === 'demo-user-1') return;
+    try {
+      const projectRef = doc(db, 'projects', proj.id);
+      const cleanProject: Record<string, any> = { ...proj, user_id: user.id };
+      // undefined を除去
+      Object.keys(cleanProject).forEach(k => {
+        if (cleanProject[k] === undefined) delete cleanProject[k];
+      });
+      await setDoc(projectRef, cleanProject, { merge: true });
+    } catch (e) {
+      console.error('Failed to sync project to Firestore:', e);
+    }
+  };
+
+  const saveActionToFirestore = async (act: NextAction) => {
+    if (!user || user.id === 'demo-user-1') return;
+    try {
+      const actRef = doc(db, 'actions', act.id);
+      const cleanAct: Record<string, any> = { ...act, user_id: user.id };
+      Object.keys(cleanAct).forEach(k => {
+        if (cleanAct[k] === undefined) delete cleanAct[k];
+      });
+      await setDoc(actRef, cleanAct, { merge: true });
+    } catch (e) {
+      console.error('Failed to sync action to Firestore:', e);
+    }
+  };
+
+  /**
+   * 現在のブラウザ内の全42件名簿・活動履歴・アクションを一括でFirestoreクラウドへアップロード
+   */
+  const syncLocalToCloud = async (): Promise<{ success: boolean; count: number; error?: string }> => {
+    if (!user || user.id === 'demo-user-1') {
+      return { success: false, count: 0, error: 'Firebaseにログインしてください。' };
+    }
+    setIsCloudSyncing(true);
+    try {
+      let count = 0;
+      for (const p of projects) {
+        await saveProjectToFirestore(p);
+        count++;
+      }
+      for (const a of actions) {
+        await saveActionToFirestore(a);
+      }
+      return { success: true, count };
+    } catch (err: any) {
+      console.error('Error in syncLocalToCloud:', err);
+      return { success: false, count: 0, error: err?.message || 'クラウド同期に失敗しました' };
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
 
   const resetToRoster42 = () => {
     const fresh = buildRoster42Dataset();
@@ -508,7 +582,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           points: earnedPoints
         };
 
-        return {
+        const updatedTarget = {
           ...p,
           status: newStatus,
           probability: newProb,
@@ -528,6 +602,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           updatedAt: nowIso,
           activities: [newActivity, ...(p.activities || [])]
         };
+        saveProjectToFirestore(updatedTarget);
+        return updatedTarget;
       })
     );
 
@@ -820,9 +896,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProject = async (projectId: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => 
-      p.id === projectId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-    ));
+    setProjects(prev => {
+      const next = prev.map(p => 
+        p.id === projectId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+      );
+      const target = next.find(p => p.id === projectId);
+      if (target) {
+        saveProjectToFirestore(target);
+      }
+      return next;
+    });
   };
 
   const postponeAction = async (actionId: string, days: number) => {
@@ -892,7 +975,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       archiveProjectAsLost,
       restoreArchivedProject,
       applyRuleToMatchingProjects,
-      resetToRoster42
+      resetToRoster42,
+      syncLocalToCloud,
+      isCloudSyncing
     }}>
       {children}
     </ProjectContext.Provider>

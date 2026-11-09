@@ -32,20 +32,23 @@ const DEFAULT_MATSUURA_USER: User = {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(DEFAULT_MATSUURA_USER);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [isInitializing, setIsInitializing] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser: FirebaseUser | null) => {
       if (fbUser) {
         setUser({
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || '松浦 貴文',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || '管理者',
           role: 'admin',
           email: fbUser.email || ''
         });
         setIsAuthenticated(true);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
       }
       setIsInitializing(false);
     });

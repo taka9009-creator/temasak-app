@@ -70,7 +70,7 @@ export default function Settings() {
   const { settings: notifSettings, updateSettings } = useNotifications();
   const [aiSettings, setAiSettings] = useState<AISettings>(getAISettings);
   const { rules, toggleRule, deleteRule, addRule, updateRule, resetToEasyOSDefaultRules } = useRules();
-  const { projects, addProject, applyRuleToMatchingProjects } = useProjects();
+  const { projects, addProject, applyRuleToMatchingProjects, syncLocalToCloud, isCloudSyncing } = useProjects();
   const { user } = useAuth();
   const [isInjectingSamples, setIsInjectingSamples] = useState(false);
   const [isAddingRule, setIsAddingRule] = useState(false);
@@ -1070,6 +1070,37 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
       <div className="two-col-grid">
         {renderMasterList('機器カラー', 'deviceColors')}
         {renderMasterList('釣銭機カラー', 'changeMachineColors')}
+      </div>
+
+      {/* 全端末データ統合（Firestore クラウド同期） */}
+      <div className="card" style={{ marginTop: '2rem', border: '2px solid #2563eb', backgroundColor: '#eff6ff', borderRadius: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <Sparkles size={20} color="#2563eb" />
+          <h3 style={{ fontSize: '1rem', color: '#1e3a8a', margin: 0, fontWeight: 800 }}>
+            ☁️ 全端末データ統合（Firestore クラウド一括同期・バックアップ）
+          </h3>
+        </div>
+        <p style={{ fontSize: '0.85rem', color: '#334155', marginBottom: '1rem', lineHeight: 1.6 }}>
+          現在のブラウザにある全{projects.length}件の名簿データ・活動履歴・獲得ポイント・次回ToDoをクラウド（Firestore）にバックアップ・同期します。<br />
+          同期が完了すると、<strong>別のパソコン・スマホ・タブレットからログインした際も、まったく同じ最新データがリアルタイムで統合・表示</strong>されます。
+        </p>
+        <button
+          className="btn btn-primary"
+          disabled={isCloudSyncing}
+          onClick={async () => {
+            if (window.confirm(`現在ローカルにある全${projects.length}件の案件とToDoをクラウドに一括同期しますか？\n（他のパソコンやスマホからも同じデータが見られるようになります）`)) {
+              const res = await syncLocalToCloud();
+              if (res.success) {
+                alert(`✅ 成功: ${res.count}件の案件データをクラウドに同期しました！他の端末からも確認できます。`);
+              } else {
+                alert(`⚠️ エラー: ${res.error}`);
+              }
+            }
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}
+        >
+          {isCloudSyncing ? 'クラウド同期中...' : `☁️ 現在の${projects.length}件をクラウドに一括同期・統合する`}
+        </button>
       </div>
 
       {/* 現場テスト用サンプルデータ投入 */}
