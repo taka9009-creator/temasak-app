@@ -117,84 +117,111 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const projectsQuery = query(collection(db, 'projects'));
     const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
-      if (snapshot.empty) return;
-      const loadedProjects: Project[] = snapshot.docs.map(docSnap => {
-        const p = docSnap.data();
-        return {
-          id: docSnap.id,
-          clinicName: p.clinicName || p.clinic_name || '',
-          clinicType: p.clinicType || p.clinic_type || '',
-          address: p.address || '',
-          phone: p.phone || '',
-          email: p.email || '',
-          contactPerson: p.contactPerson || p.contact_person || '',
-          contactTitle: p.contactTitle || p.contact_title || '',
-          source: p.source || '',
-          sourceDetail: p.sourceDetail,
-          receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
-          product: p.product || 'テマサック自動精算機',
-          quantity: p.quantity || 1,
-          priority: (p.priority as ActionPriority) || '中',
-          status: p.status || '新規',
-          salesRep: p.salesRep || p.sales_rep || '松浦 貴文',
-          ballHolder: p.ballHolder || p.ball_holder || '松浦 貴文',
-          lastActivityAt: p.lastActivityAt || p.last_activity_at || p.created_at || new Date().toISOString(),
-          probability: p.probability as any,
-          memo: p.memo || '',
-          lostReason: p.lostReason || p.lost_reason,
-          isImplementationProject: !!(p.isImplementationProject ?? p.is_implementation_project),
-          pipelineMap: p.pipelineMap || {
-            deviceType: p.device_type,
-            bodyColor: p.body_color,
-            subsidyName: p.subsidy_name,
-            creditStatus: p.credit_status,
-            emoneyStatus: p.emoney_status,
-            qrStatus: p.qr_status,
-          },
-          clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
-          initialEmailDate: p.initialEmailDate,
-          estimateSentDate: p.estimateSentDate,
-          demoType: p.demoType,
-          demoDate: p.demoDate,
-          visitDate: p.visitDate,
-          postingDate: p.postingDate,
-          consultEmailDate: p.consultEmailDate,
-          followupEmailDate: p.followupEmailDate,
-          orderDate: p.orderDate,
-          clinicHours: p.clinicHours,
-          closedDays: p.closedDays,
-          websiteUrl: p.websiteUrl,
-          reservationSystem: p.reservationSystem,
-          activities: Array.isArray(p.activities) ? p.activities : [],
-          installationDate: p.installationDate || p.installation_date,
-          createdAt: p.createdAt || p.created_at || new Date().toISOString(),
-          updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
-        };
-      });
-      setProjects(loadedProjects);
+      // クラウドにデータがある場合はそれを反映
+      if (!snapshot.empty) {
+        const loadedProjects: Project[] = snapshot.docs.map(docSnap => {
+          const p = docSnap.data();
+          return {
+            id: docSnap.id,
+            clinicName: p.clinicName || p.clinic_name || '',
+            clinicType: p.clinicType || p.clinic_type || '',
+            address: p.address || '',
+            phone: p.phone || '',
+            email: p.email || '',
+            contactPerson: p.contactPerson || p.contact_person || '',
+            contactTitle: p.contactTitle || p.contact_title || '',
+            source: p.source || '',
+            sourceDetail: p.sourceDetail,
+            receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
+            product: p.product || 'テマサック自動精算機',
+            quantity: p.quantity || 1,
+            priority: (p.priority as ActionPriority) || '中',
+            status: p.status || '新規',
+            salesRep: p.salesRep || p.sales_rep || '松浦 貴文',
+            ballHolder: p.ballHolder || p.ball_holder || '松浦 貴文',
+            lastActivityAt: p.lastActivityAt || p.last_activity_at || p.created_at || new Date().toISOString(),
+            probability: p.probability as any,
+            memo: p.memo || '',
+            lostReason: p.lostReason || p.lost_reason,
+            isImplementationProject: !!(p.isImplementationProject ?? p.is_implementation_project),
+            pipelineMap: p.pipelineMap || {
+              deviceType: p.device_type,
+              bodyColor: p.body_color,
+              subsidyName: p.subsidy_name,
+              creditStatus: p.credit_status,
+              emoneyStatus: p.emoney_status,
+              qrStatus: p.qr_status,
+            },
+            clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
+            initialEmailDate: p.initialEmailDate,
+            estimateSentDate: p.estimateSentDate,
+            demoType: p.demoType,
+            demoDate: p.demoDate,
+            visitDate: p.visitDate,
+            postingDate: p.postingDate,
+            consultEmailDate: p.consultEmailDate,
+            followupEmailDate: p.followupEmailDate,
+            orderDate: p.orderDate,
+            clinicHours: p.clinicHours,
+            closedDays: p.closedDays,
+            websiteUrl: p.websiteUrl,
+            reservationSystem: p.reservationSystem,
+            activities: Array.isArray(p.activities) ? p.activities : [],
+            installationDate: p.installationDate || p.installation_date,
+            createdAt: p.createdAt || p.created_at || new Date().toISOString(),
+            updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
+          };
+        });
+        setProjects(loadedProjects);
+      } else {
+        // クラウドがまだ空の場合、ローカルにデータがあれば自動で初回同期する
+        setProjects(prev => {
+          if (prev.length > 0) {
+            // クラウドに既存データを一括自動保存
+            prev.forEach(item => saveProjectToFirestore(item));
+          } else {
+            const fresh = buildRoster42Dataset();
+            fresh.projects.forEach(item => saveProjectToFirestore(item));
+            return fresh.projects;
+          }
+          return prev;
+        });
+      }
     }, (error) => {
       console.error('Firestore projects error:', error);
     });
 
     const actionsQuery = query(collection(db, 'actions'));
     const unsubscribeActions = onSnapshot(actionsQuery, (snapshot) => {
-      if (snapshot.empty) return;
-      const loadedActions: NextAction[] = snapshot.docs.map(docSnap => {
-        const a = docSnap.data();
-        return {
-          id: docSnap.id,
-          projectId: a.projectId || a.project_id || '',
-          title: a.title || '',
-          status: a.status || '未完了',
-          deadline: a.deadline || '',
-          assignee: a.assignee || '',
-          priority: a.priority || '中',
-          memo: a.memo || '',
-          completedAt: a.completedAt || a.completed_at,
-          createdAt: a.createdAt || a.created_at || new Date().toISOString()
-        };
-      });
-      setActions(loadedActions);
+      if (!snapshot.empty) {
+        const loadedActions: NextAction[] = snapshot.docs.map(docSnap => {
+          const a = docSnap.data();
+          return {
+            id: docSnap.id,
+            projectId: a.projectId || a.project_id || '',
+            title: a.title || '',
+            status: a.status || '未完了',
+            deadline: a.deadline || '',
+            assignee: a.assignee || '',
+            priority: a.priority || '中',
+            memo: a.memo || '',
+            completedAt: a.completedAt || a.completed_at,
+            createdAt: a.createdAt || a.created_at || new Date().toISOString()
+          };
+        });
+        setActions(loadedActions);
+      } else {
+        setActions(prev => {
+          if (prev.length > 0) {
+            prev.forEach(item => saveActionToFirestore(item));
+          } else {
+            const fresh = buildRoster42Dataset();
+            fresh.actions.forEach(item => saveActionToFirestore(item));
+            return fresh.actions;
+          }
+          return prev;
+        });
+      }
     }, (error) => {
       console.error('Firestore actions error:', error);
     });

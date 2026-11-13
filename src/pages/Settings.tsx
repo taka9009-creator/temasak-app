@@ -70,7 +70,7 @@ export default function Settings() {
   const { settings: notifSettings, updateSettings } = useNotifications();
   const [aiSettings, setAiSettings] = useState<AISettings>(getAISettings);
   const { rules, toggleRule, deleteRule, addRule, updateRule, resetToEasyOSDefaultRules } = useRules();
-  const { projects, addProject, applyRuleToMatchingProjects, syncLocalToCloud, isCloudSyncing } = useProjects();
+  const { projects, addProject, applyRuleToMatchingProjects, syncLocalToCloud, isCloudSyncing, resetToRoster42 } = useProjects();
   const { user } = useAuth();
   const [isInjectingSamples, setIsInjectingSamples] = useState(false);
   const [isAddingRule, setIsAddingRule] = useState(false);
@@ -1101,6 +1101,21 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
         >
           {isCloudSyncing ? 'クラウド同期中...' : `☁️ 現在の${projects.length}件をクラウドに一括同期・統合する`}
         </button>
+
+        {projects.length !== 42 && (
+          <button
+            className="btn btn-outline"
+            onClick={() => {
+              if (window.confirm('標準の42件名簿データ（北海道・東北クリニック＆ディーラー）を読み込み直してリセットしますか？')) {
+                resetToRoster42();
+                alert('🔄 42件名簿データを再読み込みしました。「現在の42件をクラウドに一括同期・統合する」を押してクラウドに反映させてください。');
+              }
+            }}
+            style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, borderColor: '#2563eb', color: '#1d4ed8' }}
+          >
+            <RotateCcw size={15} /> 📋 42件の名簿初期データを再読み込みする
+          </button>
+        )}
       </div>
 
       {/* 現場テスト用サンプルデータ投入 */}
