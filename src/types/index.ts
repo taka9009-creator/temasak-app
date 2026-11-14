@@ -154,11 +154,44 @@ export interface PipelineMap {
   constructionCheck?: boolean; // 工事手配確認
   shippingCheck?: boolean; // 出荷手配確認
 
-  // 導入予定日（キャッシュレス）
-  creditStatus?: string; // クレ
-  emoneyStatus?: string; // 電マ
-  qrStatus?: string; // QR
+  // 導入予定日・キャッシュレス決済選択（複数組み合わせ可）
+  cashlessOptions?: string[]; // ['credit', 'jcb_credit', 'emoney', 'qr']
+  creditStatus?: string; // ■ クレジット (VISA / Mastercard 等の主要カード決済)
+  jcbCreditStatus?: string; // ■ JCB系クレジット (JCB / American Express / Diners 等)
+  emoneyStatus?: string; // ■ 電子マネー (交通系IC・iD・QUICPay・楽天Edy 等)
+  qrStatus?: string; // ■ QR決済 (PayPay・楽天ペイ・d払い・au PAY 等)
 }
+
+export const CASHLESS_PAYMENT_CATEGORIES = [
+  {
+    id: 'credit',
+    title: '■ クレジット',
+    subtitle: 'VISA / Mastercard 等の主要カード決済',
+    shortLabel: 'クレジット(VISA/Master)',
+    statusKey: 'creditStatus' as const
+  },
+  {
+    id: 'jcb_credit',
+    title: '■ JCB系クレジット',
+    subtitle: 'JCB / American Express / Diners 等',
+    shortLabel: 'JCB系クレジット',
+    statusKey: 'jcbCreditStatus' as const
+  },
+  {
+    id: 'emoney',
+    title: '■ 電子マネー',
+    subtitle: '交通系IC・iD・QUICPay・楽天Edy 等',
+    shortLabel: '電子マネー',
+    statusKey: 'emoneyStatus' as const
+  },
+  {
+    id: 'qr',
+    title: '■ QR決済',
+    subtitle: 'PayPay・楽天ペイ・d払い・au PAY 等',
+    shortLabel: 'QR決済',
+    statusKey: 'qrStatus' as const
+  }
+] as const;
 
 export interface Activity {
   id: string;
@@ -287,8 +320,76 @@ export function getClinicTotalPoints(project: Project): number {
 }
 
 /**
+ * 1件の活動履歴から対応する進捗フローステージを推定するヘルパー
+ * isExplicitMove: カンバン・進捗フロー移動による明示的なステージ変更かどうか
+ */
+export function inferStageFromActivity(act: Activity): {
+  stage: SalesProgressStage | '失注';
+  isExplicitMove: boolean;
+} | null {
+  const text = `${act.type || ''} ${act.content || ''}`;
+
+  // 1. 明示的なステージ移動ログ（例: ➔【kz送客】 / ステージ移動: 見積）
+  const arrowMatch = text.match(/➔\s*【?([^】\s(]+)】?/);
+  if (arrowMatch) {
+    const target = arrowMatch[1].trim();
+    if (target === '失注') return { stage: '失注', isExplicitMove: true };
+    if ((SALES_PROGRESS_FLOW as readonly string[]).includes(target)) {
+      return { stage: target as SalesProgressStage, isExplicitMove: true };
+    }
+  }
+  const stageMoveMatch = text.match(/ステージ移動:\s*(問合せ|初動|デモ|見積|検討|後追い|kz送客|受注|失注)/);
+  if (stageMoveMatch) {
+    const target = stageMoveMatch[1];
+    if (target === '失注') return { stage: '失注', isExplicitMove: true };
+    return { stage: target as SalesProgressStage, isExplicitMove: true };
+  }
+
+  // 2. 通常の活動種別からの進捗ステージ推定
+  if (text.includes('失注')) return { stage: '失注', isExplicitMove: true };
+  if (text.includes('受注')) return { stage: '受注', isExplicitMove: false };
+  if (text.includes('kz送客') || text.includes('KZ送客') || text.includes('補助金コンサル')) {
+    return { stage: 'kz送客', isExplicitMove: false };
+  }
+  if (text.includes('後追いメール') || text.includes('【後追い】')) {
+    return { stage: '後追い', isExplicitMove: false };
+  }
+  if (text.includes('相談メール') || text.includes('【検討】')) {
+    return { stage: '検討', isExplicitMove: false };
+  }
+  if (text.includes('見積書送付') || text.includes('概算見積') || text.includes('見積提出') || text.includes('【見積】')) {
+    return { stage: '見積', isExplicitMove: false };
+  }
+  if (
+    text.includes('オンラインデモ') ||
+    text.includes('訪問デモ') ||
+    text.includes('来社デモ') ||
+    text.includes('面談') ||
+    text.includes('【デモ】')
+  ) {
+    return { stage: 'デモ', isExplicitMove: false };
+  }
+  if (
+    text.includes('初動メール') ||
+    text.includes('〇案内メール') ||
+    text.includes('【会話】') ||
+    text.includes('訪問') ||
+    text.includes('ポスティング') ||
+    text.includes('【折返待ち】') ||
+    text.includes('【不在】') ||
+    text.includes('架電')
+  ) {
+    return { stage: '初動', isExplicitMove: false };
+  }
+  if (text.includes('問合せ')) {
+    return { stage: '問合せ', isExplicitMove: false };
+  }
+  return null;
+}
+
+/**
  * 活動履歴（これまでの活動）の修正・削除・追加後に、
- * 案件のポイント・各種アクション実施日・メモのフラグを自動同期するヘルパー
+ * 案件の進捗ステータス（進捗フロー・カンバン連動）・ポイント・各種アクション実施日・メモのフラグを自動同期するヘルパー
  */
 export function syncProjectWithActivities(project: Project, nextActivities: Activity[]): Project {
   const totalPts = nextActivities.reduce((sum, act) => sum + inferActivityPoints(act), 0);
@@ -298,9 +399,43 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
     .sort((a, b) => b.localeCompare(a));
   const latestDate = sortedDates[0] || project.receivedAt || project.lastActivityAt;
 
+  // 活動履歴（index 0 が最新、末尾が最古）を時系列（最古 ➔ 最新）で走査して現在の進捗ステージを算出
+  let syncedStatus: ProjectStatus = project.status === '失注' ? '失注' : '問合せ';
+  if (nextActivities.length > 0) {
+    const chronological = [...nextActivities].reverse();
+    let stageCursor: SalesProgressStage | '失注' = '問合せ';
+    for (const act of chronological) {
+      const inferred = inferStageFromActivity(act);
+      if (!inferred) continue;
+      if (inferred.isExplicitMove) {
+        // 明示的なステージ移動（後ろに戻す移動も含む）はそのステージへ直接セット
+        stageCursor = inferred.stage;
+      } else if (stageCursor === '失注') {
+        stageCursor = inferred.stage;
+      } else if (inferred.stage !== '失注') {
+        // 通常の活動追加では、現在のステージより先のステージであれば前進、または最新アクションのステージへ連動
+        const curIdx = SALES_PROGRESS_FLOW.indexOf(stageCursor);
+        const nextIdx = SALES_PROGRESS_FLOW.indexOf(inferred.stage);
+        if (inferred.stage === '初動' && curIdx > 1) {
+          // 既にデモ・見積・検討以降に進んでいる状態での「架電/訪問」では初動に逆戻りさせない
+          continue;
+        }
+        if (nextIdx >= 0) {
+          stageCursor = inferred.stage;
+        }
+      }
+    }
+    syncedStatus = stageCursor;
+  }
+
+  const syncedStageIdx =
+    syncedStatus === '失注' ? -1 : SALES_PROGRESS_FLOW.indexOf(syncedStatus as SalesProgressStage);
+
   const findLatestDateByKeyword = (keywords: string[]): string | undefined => {
     for (const act of nextActivities) {
       const text = `${act.type || ''} ${act.content || ''}`;
+      // ステージ移動ログ自体は実施日キーワードから除外
+      if (text.includes('進捗移動:') || text.includes('ステージ移動:')) continue;
       if (keywords.some(k => text.includes(k))) {
         return act.date;
       }
@@ -308,19 +443,20 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
     return undefined;
   };
 
-  const initialEmailDate = findLatestDateByKeyword(['初動メール', '〇案内メール']);
-  const estimateSentDate = findLatestDateByKeyword(['見積書送付']);
+  let initialEmailDate = findLatestDateByKeyword(['初動メール', '〇案内メール']);
+  let estimateSentDate = findLatestDateByKeyword(['見積書送付']);
   const visitDate = findLatestDateByKeyword(['訪問 (+3p)', '現地訪問']);
   const postingDate = findLatestDateByKeyword(['ポスティング']);
-  const consultEmailDate = findLatestDateByKeyword(['相談メール']);
-  const followupEmailDate = findLatestDateByKeyword(['後追いメール']);
-  const kzReferralDate = findLatestDateByKeyword(['kz送客', 'KZ送客', '補助金コンサル']);
-  const orderDate = findLatestDateByKeyword(['受注']);
+  let consultEmailDate = findLatestDateByKeyword(['相談メール']);
+  let followupEmailDate = findLatestDateByKeyword(['後追いメール']);
+  let kzReferralDate = findLatestDateByKeyword(['kz送客', 'KZ送客', '補助金コンサル']);
+  let orderDate = findLatestDateByKeyword(['受注']);
 
   let demoDate: string | undefined;
   let demoType: 'オンラインデモ' | '訪問デモ' | '来社デモ' | undefined;
   for (const act of nextActivities) {
     const text = `${act.type || ''} ${act.content || ''}`;
+    if (text.includes('進捗移動:') || text.includes('ステージ移動:')) continue;
     if (text.includes('オンラインデモ')) {
       demoDate = act.date;
       demoType = 'オンラインデモ';
@@ -336,6 +472,20 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
       demoType = '来社デモ';
       break;
     }
+  }
+
+  // もし明示的なステージ移動で前の段階へ戻されている場合、それより後ろの段階の日付フラグをクリアして整合性を保つ
+  if (syncedStageIdx >= 0) {
+    if (syncedStageIdx < 7) orderDate = undefined;
+    if (syncedStageIdx < 6) kzReferralDate = undefined;
+    if (syncedStageIdx < 5) followupEmailDate = undefined;
+    if (syncedStageIdx < 4) consultEmailDate = undefined;
+    if (syncedStageIdx < 3) estimateSentDate = undefined;
+    if (syncedStageIdx < 2) {
+      demoDate = undefined;
+      demoType = undefined;
+    }
+    if (syncedStageIdx < 1) initialEmailDate = undefined;
   }
 
   // メモ内のアクションタグも同期更新
@@ -388,6 +538,7 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
 
   return {
     ...project,
+    status: syncedStatus,
     activities: nextActivities,
     clinicPoints: totalPts,
     lastActivityAt: latestDate,

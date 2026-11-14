@@ -36,6 +36,7 @@ import { parsePastedRosterText, convertParsedLeadsToProjects } from '../utils/ro
 import {
   ACTION_POINT_RULES,
   SALES_PROGRESS_FLOW,
+  CASHLESS_PAYMENT_CATEGORIES,
   getClinicTotalPoints,
   normalizeProgressStage,
   isBtoBDealerProject
@@ -116,7 +117,7 @@ export default function AllInOneSalesOS() {
 
   // 詳細ドロワー / AIモーダル状態
   const [detailProjectId, setDetailProjectId] = useState<string | null>(null);
-  const [detailInitialTab, setDetailInitialTab] = useState<'basicInfo' | 'activities'>('basicInfo');
+  const [detailInitialTab, setDetailInitialTab] = useState<'basicInfo' | 'activities' | 'cashlessStatus'>('basicInfo');
   const [aiModalProject, setAiModalProject] = useState<Project | null>(null);
   const [aiScene, setAiScene] = useState<'auto' | 'initial_email' | 'consult_email' | 'followup_email' | 'estimate' | 'absent' | 'callback' | 'talked' | 'subsidy'>('auto');
   const [customDraftSubject, setCustomDraftSubject] = useState('');
@@ -181,7 +182,8 @@ export default function AllInOneSalesOS() {
       };
     }
     const memo = p.memo || '';
-    if (p.status === '受注' || p.orderDate || memo.includes('受注済')) {
+    const stage = normalizeProgressStage(p);
+    if (stage === '受注') {
       return {
         code: 'won',
         label: '🎉 受注確定',
@@ -190,7 +192,7 @@ export default function AllInOneSalesOS() {
         borderColor: '#f59e0b'
       };
     }
-    if (p.status === 'kz送客' || p.kzReferralDate || memo.includes('kz送客済')) {
+    if (stage === 'kz送客') {
       return {
         code: 'interview',
         label: '💰 kz送客済（補助金採択後に受注）',
@@ -200,16 +202,18 @@ export default function AllInOneSalesOS() {
       };
     }
     if (
-      p.demoDate ||
-      p.estimateSentDate ||
-      memo.includes('面談日:') ||
-      memo.includes('見積書送付済') ||
-      p.status === 'デモ' ||
-      p.status === '見積' ||
-      p.status === '検討' ||
-      p.status === '後追い'
+      stage === 'デモ' ||
+      stage === '見積' ||
+      stage === '検討' ||
+      stage === '後追い'
     ) {
-      return { code: 'interview', label: '🌟 デモ・見積進行', badgeBg: '#dcfce7', badgeColor: '#15803d', borderColor: '#86efac' };
+      return {
+        code: 'interview',
+        label: `🌟 デモ・見積進行（${stage}）`,
+        badgeBg: '#dcfce7',
+        badgeColor: '#15803d',
+        borderColor: '#86efac'
+      };
     }
     if (memo.includes('架電状況: 折返待ち')) {
       return { code: 'callback', label: '🔥 折返待ち（最優先）', badgeBg: '#fee2e2', badgeColor: '#b91c1c', borderColor: '#fca5a5' };
@@ -459,7 +463,7 @@ export default function AllInOneSalesOS() {
   // クリニック直販（営業中のみ・受注と失注は別枠へ分離）、BtoB別枠、クリニック受注別枠、クリニック失注別枠
   const isWonClinicOrProject = (p: Project): boolean => {
     if (p.status === '失注') return false;
-    return normalizeProgressStage(p) === '受注' || p.status === '受注' || !!p.orderDate || !!p.memo?.includes('受注済');
+    return normalizeProgressStage(p) === '受注';
   };
 
   const matchesCommonFilters = (p: Project): boolean => {
@@ -588,15 +592,15 @@ export default function AllInOneSalesOS() {
     );
   };
 
-  // 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）クリック連動ハンドラ（案件カンバンと完全同期）
+  // 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）クリック連動ハンドラ（案件カンバン・活動履歴と完全同期）
   const handleSelectProgressStage = (p: Project, stage: SalesProgressStage) => {
     const currentStage = normalizeProgressStage(p);
     if (currentStage === stage && p.status === stage) return;
     handleStatusChange(p.id, stage);
     triggerToast(
       stage === 'kz送客'
-        ? `💰 「${p.clinicName}」を【kz送客（補助金コンサル送客・採択後に受注）】へ更新しました（カンバンと同期済）`
-        : `🚀 「${p.clinicName}」の進捗フロー＆カンバンを【${stage}】に同期更新しました`
+        ? `💰 「${p.clinicName}」を【kz送客（補助金コンサル送客・採択後に受注）】へ更新しました（カンバン＆活動履歴と同期済）`
+        : `🚀 「${p.clinicName}」の進捗フロー・カンバン・活動履歴を【${stage}】に同期更新しました`
     );
   };
 
@@ -2468,6 +2472,39 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       </span>
                     )}
 
+                    {(() => {
+                      const pm = project.pipelineMap || {};
+                      const selectedCashless = Array.isArray(pm.cashlessOptions)
+                        ? pm.cashlessOptions
+                        : [
+                            pm.creditStatus ? 'credit' : null,
+                            pm.jcbCreditStatus ? 'jcb_credit' : null,
+                            pm.emoneyStatus ? 'emoney' : null,
+                            pm.qrStatus ? 'qr' : null
+                          ].filter(Boolean) as string[];
+                      return CASHLESS_PAYMENT_CATEGORIES.filter(c => selectedCashless.includes(c.id)).map(c => (
+                        <span
+                          key={c.id}
+                          onClick={() => {
+                            setDetailInitialTab('cashlessStatus');
+                            setDetailProjectId(project.id);
+                          }}
+                          title={`キャッシュレス決済選択: ${c.title}（${c.subtitle}）— クリックで編集`}
+                          style={{
+                            padding: '0.14rem 0.55rem',
+                            borderRadius: '0.3rem',
+                            backgroundColor: '#eff6ff',
+                            color: '#1e40af',
+                            border: '1px solid #93c5fd',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          💳 {c.shortLabel}
+                        </span>
+                      ));
+                    })()}
+
                     <span style={{ color: '#64748b', fontWeight: 600 }}>担当: {project.salesRep}</span>
                   </div>
 
@@ -2981,10 +3018,30 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                   <button
                     onClick={() => {
+                      setDetailInitialTab('cashlessStatus');
+                      setDetailProjectId(project.id);
+                    }}
+                    title="キャッシュレス決済の選択（クレジット / JCB系クレジット / 電子マネー / QR決済）を開く"
+                    style={{
+                      padding: '0.38rem 0.65rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #a5b4fc',
+                      backgroundColor: '#eef2ff',
+                      color: '#3730a3',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💳 キャッシュレス選択
+                  </button>
+
+                  <button
+                    onClick={() => {
                       setDetailInitialTab('activities');
                       setDetailProjectId(project.id);
                     }}
-                    title="これまでの活動の修正・削除を開く"
+                    title="これまでの活動の修正・削除を開く（進捗フロー・カンバンと自動連動）"
                     style={{
                       padding: '0.38rem 0.65rem',
                       borderRadius: '0.45rem',

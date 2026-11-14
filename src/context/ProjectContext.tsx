@@ -19,8 +19,8 @@ import {
   createActionFromGlobalRule
 } from '../utils/actionRules';
 import { buildRoster42Dataset } from '../utils/roster42Data';
-import { ACTION_POINT_RULES, getClinicTotalPoints, normalizeProgressStage } from '../types';
-import type { Project, NextAction, ProjectStatus, ActionPriority, Activity, QuickCallOutcome, LostReasonType } from '../types';
+import { ACTION_POINT_RULES, SALES_PROGRESS_FLOW, getClinicTotalPoints, normalizeProgressStage } from '../types';
+import type { Project, NextAction, ProjectStatus, ActionPriority, Activity, QuickCallOutcome, LostReasonType, SalesProgressStage } from '../types';
 import { useWorkflow } from './WorkflowContext';
 import { useRules } from './RuleContext';
 import type { GlobalRule } from './RuleContext';
@@ -201,7 +201,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             deviceType: p.device_type,
             bodyColor: p.body_color,
             subsidyName: p.subsidy_name,
+            cashlessOptions: p.cashless_options,
             creditStatus: p.credit_status,
+            jcbCreditStatus: p.jcb_credit_status,
             emoneyStatus: p.emoney_status,
             qrStatus: p.qr_status,
           },
@@ -946,34 +948,105 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setProjects(prev =>
       prev.map(p => {
         if (p.id !== project.id) return p;
+        const prevStage = p.status === '失注' ? '失注' : normalizeProgressStage(p);
         let nextMemo = p.memo || '';
+        let nextInitialEmailDate = p.initialEmailDate;
+        let nextDemoDate = p.demoDate;
+        let nextEstimateDate = p.estimateSentDate;
+        let nextConsultDate = p.consultEmailDate;
+        let nextFollowupDate = p.followupEmailDate;
         let nextKzDate = p.kzReferralDate;
         let nextOrderDate = p.orderDate;
         let nextProb = p.probability;
 
-        if (newStatus === 'kz送客') {
-          nextKzDate = p.kzReferralDate || todayStr;
+        const targetStageIdx =
+          newStatus === '失注' ? -1 : SALES_PROGRESS_FLOW.indexOf(newStatus as SalesProgressStage);
+
+        // 前のステージへ戻した場合、それより後ろのステージの日付・メモタグをクリアして完全連動させる
+        if (targetStageIdx >= 0) {
+          if (targetStageIdx < 7) {
+            nextOrderDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*受注済\([^)]*\)/g, '');
+          }
+          if (targetStageIdx < 6) {
+            nextKzDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*kz送客済\([^)]*\)/g, '');
+          }
+          if (targetStageIdx < 5) {
+            nextFollowupDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*後追いメール済\([^)]*\)/g, '');
+          }
+          if (targetStageIdx < 4) {
+            nextConsultDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*相談メール済\([^)]*\)/g, '');
+          }
+          if (targetStageIdx < 3) {
+            nextEstimateDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*見積書送付済\([^)]*\)/g, '');
+          }
+          if (targetStageIdx < 2) {
+            nextDemoDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*面談日:\s*[^|]+/g, '');
+          }
+          if (targetStageIdx < 1) {
+            nextInitialEmailDate = undefined;
+            nextMemo = nextMemo.replace(/\s*\|\s*初動メール済\([^)]*\)/g, '');
+          }
+        }
+
+        // 移動先ステージに応じた日付・確度・メモの自動セット
+        if (newStatus === '初動' && !nextInitialEmailDate) {
+          nextInitialEmailDate = todayStr;
+        } else if (newStatus === 'デモ') {
+          nextDemoDate = nextDemoDate || todayStr;
+          nextProb = 'A';
+        } else if (newStatus === '見積') {
+          nextEstimateDate = nextEstimateDate || todayStr;
+          nextProb = 'A';
+        } else if (newStatus === '検討') {
+          nextConsultDate = nextConsultDate || todayStr;
+          nextProb = nextProb || 'B';
+        } else if (newStatus === '後追い') {
+          nextFollowupDate = nextFollowupDate || todayStr;
+        } else if (newStatus === 'kz送客') {
+          nextKzDate = nextKzDate || todayStr;
           nextProb = 'A';
           if (!nextMemo.includes('kz送客済')) {
             nextMemo = `${nextMemo} | kz送客済(${nextKzDate})`;
           }
         } else if (newStatus === '受注') {
-          nextOrderDate = p.orderDate || todayStr;
+          nextOrderDate = nextOrderDate || todayStr;
           nextProb = 'A';
           if (!nextMemo.includes('受注済')) {
             nextMemo = `${nextMemo} | 受注済(${nextOrderDate})`;
           }
         }
 
+        // 進捗フロー・案件カンバンの移動を「活動履歴」にも自動記録して3方向完全連動
+        const stageMoveActivity: Activity = {
+          id: uuidv4(),
+          projectId: p.id,
+          date: todayStr,
+          type: `🔄 進捗移動: 【${prevStage}】➔【${newStatus}】`,
+          content: `進捗フロー・案件カンバンを「${prevStage}」から「${newStatus}」へ移動しました。`,
+          points: 0
+        };
+
         const updated: Project = {
           ...p,
           status: newStatus,
           probability: nextProb,
+          initialEmailDate: nextInitialEmailDate,
+          demoDate: nextDemoDate,
+          estimateSentDate: nextEstimateDate,
+          consultEmailDate: nextConsultDate,
+          followupEmailDate: nextFollowupDate,
           kzReferralDate: nextKzDate,
           orderDate: nextOrderDate,
-          memo: nextMemo,
+          memo: nextMemo.trim(),
           ballHolder: nextBallHolder,
           isImplementationProject: newIsImplementation,
+          activities: [stageMoveActivity, ...(p.activities || [])],
           lastActivityAt: todayStr,
           updatedAt: nowIso
         };
@@ -1075,6 +1148,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProject = async (projectId: string, updates: Partial<Project>) => {
+    // ステータス単独変更の場合は handleStatusChange を経由させて進捗フロー・カンバン・活動履歴を完全連動させる
+    if (Object.keys(updates).length === 1 && updates.status) {
+      await handleStatusChange(projectId, updates.status);
+      return;
+    }
     setProjects(prev => {
       const next = prev.map(p =>
         p.id === projectId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p

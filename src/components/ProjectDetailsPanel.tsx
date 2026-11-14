@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   SALES_PROGRESS_FLOW,
+  CASHLESS_PAYMENT_CATEGORIES,
   getClinicTotalPoints,
   inferActivityPoints,
   isBtoBDealerProject,
@@ -172,6 +173,14 @@ export default function ProjectDetailsPanel({
   const [extractStatusMsg, setExtractStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saveSuccessFlag, setSaveSuccessFlag] = useState(false);
 
+  // キャッシュレス決済の選択（複数組み合わせ可）ステート
+  const [cashlessOptions, setCashlessOptions] = useState<string[]>([]);
+  const [creditStatus, setCreditStatus] = useState('');
+  const [jcbCreditStatus, setJcbCreditStatus] = useState('');
+  const [emoneyStatus, setEmoneyStatus] = useState('');
+  const [qrStatus, setQrStatus] = useState('');
+  const [cashlessSaveMsg, setCashlessSaveMsg] = useState<string | null>(null);
+
   useEffect(() => {
     setActiveTab(initialTab);
   }, [initialTab, project?.id]);
@@ -194,6 +203,24 @@ export default function ProjectDetailsPanel({
     setProbability(project.probability || '未設定');
     setDirector(project.pipelineMap?.director || '');
     setDepartment(project.pipelineMap?.department || project.clinicType || '');
+
+    // キャッシュレス導入状況の復元
+    const pm = project.pipelineMap || {};
+    const inferredOpts = Array.isArray(pm.cashlessOptions)
+      ? pm.cashlessOptions
+      : [
+          pm.creditStatus ? 'credit' : null,
+          pm.jcbCreditStatus ? 'jcb_credit' : null,
+          pm.emoneyStatus ? 'emoney' : null,
+          pm.qrStatus ? 'qr' : null
+        ].filter(Boolean) as string[];
+    setCashlessOptions(inferredOpts);
+    setCreditStatus(pm.creditStatus || '');
+    setJcbCreditStatus(pm.jcbCreditStatus || '');
+    setEmoneyStatus(pm.emoneyStatus || '');
+    setQrStatus(pm.qrStatus || '');
+    setCashlessSaveMsg(null);
+
     setExtractStatusMsg(null);
     setSaveSuccessFlag(false);
     setEditingActivityId(null);
@@ -1367,15 +1394,364 @@ ${(project.activities || []).map(a => {
 
           {activeTab === 'cashlessStatus' && (
             <div className="drawer-section" style={{ backgroundColor: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>キャッシュレス導入状況</h3>
-                <button className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}><Save size={14} /> 保存</button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div>
+                  <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#0f172a' }}>
+                    💳 キャッシュレス導入状況 ➔ キャッシュレス決済の選択（複数組み合わせ可）
+                  </h3>
+                  <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '0.2rem' }}>
+                    導入希望・利用する決済区分をクリックして複数選択できます（選択すると即時保存されます）。
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '0.28rem 0.65rem', fontSize: '0.74rem', fontWeight: 700, backgroundColor: '#ffffff' }}
+                    onClick={() => {
+                      const allIds = CASHLESS_PAYMENT_CATEGORIES.map(c => c.id);
+                      const nextCredit = creditStatus || '導入希望';
+                      const nextJcb = jcbCreditStatus || '導入希望';
+                      const nextEmoney = emoneyStatus || '導入希望';
+                      const nextQr = qrStatus || '導入希望';
+                      setCashlessOptions(allIds);
+                      setCreditStatus(nextCredit);
+                      setJcbCreditStatus(nextJcb);
+                      setEmoneyStatus(nextEmoney);
+                      setQrStatus(nextQr);
+                      onUpdateProject?.(project.id, {
+                        pipelineMap: {
+                          ...project.pipelineMap,
+                          cashlessOptions: allIds,
+                          creditStatus: nextCredit,
+                          jcbCreditStatus: nextJcb,
+                          emoneyStatus: nextEmoney,
+                          qrStatus: nextQr
+                        }
+                      });
+                      setCashlessSaveMsg('✅ 4区分すべて（フルセット）を選択・保存しました');
+                      setTimeout(() => setCashlessSaveMsg(null), 3000);
+                    }}
+                  >
+                    すべて選択（4種）
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '0.28rem 0.65rem', fontSize: '0.74rem', fontWeight: 700, backgroundColor: '#ffffff' }}
+                    onClick={() => {
+                      const creditOnly = ['credit', 'jcb_credit'];
+                      const nextCredit = creditStatus || '導入希望';
+                      const nextJcb = jcbCreditStatus || '導入希望';
+                      setCashlessOptions(creditOnly);
+                      setCreditStatus(nextCredit);
+                      setJcbCreditStatus(nextJcb);
+                      setEmoneyStatus('');
+                      setQrStatus('');
+                      onUpdateProject?.(project.id, {
+                        pipelineMap: {
+                          ...project.pipelineMap,
+                          cashlessOptions: creditOnly,
+                          creditStatus: nextCredit,
+                          jcbCreditStatus: nextJcb,
+                          emoneyStatus: '',
+                          qrStatus: ''
+                        }
+                      });
+                      setCashlessSaveMsg('✅ クレジット2種（主要＋JCB系）を選択・保存しました');
+                      setTimeout(() => setCashlessSaveMsg(null), 3000);
+                    }}
+                  >
+                    クレジット2種のみ
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    style={{ padding: '0.28rem 0.65rem', fontSize: '0.74rem', color: '#64748b', backgroundColor: '#ffffff' }}
+                    onClick={() => {
+                      setCashlessOptions([]);
+                      setCreditStatus('');
+                      setJcbCreditStatus('');
+                      setEmoneyStatus('');
+                      setQrStatus('');
+                      onUpdateProject?.(project.id, {
+                        pipelineMap: {
+                          ...project.pipelineMap,
+                          cashlessOptions: [],
+                          creditStatus: '',
+                          jcbCreditStatus: '',
+                          emoneyStatus: '',
+                          qrStatus: ''
+                        }
+                      });
+                      setCashlessSaveMsg('選択をクリアしました');
+                      setTimeout(() => setCashlessSaveMsg(null), 3000);
+                    }}
+                  >
+                    クリア
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ padding: '0.3rem 0.85rem', fontSize: '0.76rem', fontWeight: 800 }}
+                    onClick={() => {
+                      onUpdateProject?.(project.id, {
+                        pipelineMap: {
+                          ...project.pipelineMap,
+                          cashlessOptions,
+                          creditStatus,
+                          jcbCreditStatus,
+                          emoneyStatus,
+                          qrStatus
+                        }
+                      });
+                      setCashlessSaveMsg('✅ キャッシュレス導入状況を保存しました');
+                      setTimeout(() => setCashlessSaveMsg(null), 3000);
+                    }}
+                  >
+                    <Save size={14} /> 保存
+                  </button>
+                </div>
               </div>
-              <div className="card" style={{ padding: '1rem' }}>
-                <div className="two-col-grid" style={{ fontSize: '0.875rem', gap: '0.5rem' }}>
-                  <div><strong>クレカ:</strong> <input type="text" className="mock-input" defaultValue={project.pipelineMap?.creditStatus} /></div>
-                  <div><strong>電子マネー:</strong> <input type="text" className="mock-input" defaultValue={project.pipelineMap?.emoneyStatus} /></div>
-                  <div><strong>QR:</strong> <input type="text" className="mock-input" defaultValue={project.pipelineMap?.qrStatus} /></div>
+
+              {cashlessSaveMsg && (
+                <div style={{
+                  marginBottom: '0.75rem',
+                  padding: '0.5rem 0.85rem',
+                  borderRadius: '0.5rem',
+                  backgroundColor: '#ecfdf5',
+                  border: '1px solid #6ee7b7',
+                  color: '#065f46',
+                  fontSize: '0.78rem',
+                  fontWeight: 800
+                }}>
+                  {cashlessSaveMsg}
+                </div>
+              )}
+
+              {/* 4つのキャッシュレス決済選択カード（複数組み合わせ可） */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.85rem' }}>
+                {CASHLESS_PAYMENT_CATEGORIES.map(cat => {
+                  const isSelected = cashlessOptions.includes(cat.id);
+                  const statusValue =
+                    cat.id === 'credit'
+                      ? creditStatus
+                      : cat.id === 'jcb_credit'
+                      ? jcbCreditStatus
+                      : cat.id === 'emoney'
+                      ? emoneyStatus
+                      : qrStatus;
+
+                  const setStatusValue = (val: string) => {
+                    if (cat.id === 'credit') setCreditStatus(val);
+                    else if (cat.id === 'jcb_credit') setJcbCreditStatus(val);
+                    else if (cat.id === 'emoney') setEmoneyStatus(val);
+                    else setQrStatus(val);
+                  };
+
+                  const handleToggleCategory = () => {
+                    const nextSelected = isSelected
+                      ? cashlessOptions.filter(id => id !== cat.id)
+                      : [...cashlessOptions, cat.id];
+                    const nextStatusVal = !isSelected && !statusValue ? '導入希望' : isSelected ? '' : statusValue;
+
+                    setCashlessOptions(nextSelected);
+                    setStatusValue(nextStatusVal);
+
+                    const nextMap = {
+                      ...project.pipelineMap,
+                      cashlessOptions: nextSelected,
+                      creditStatus: cat.id === 'credit' ? nextStatusVal : creditStatus,
+                      jcbCreditStatus: cat.id === 'jcb_credit' ? nextStatusVal : jcbCreditStatus,
+                      emoneyStatus: cat.id === 'emoney' ? nextStatusVal : emoneyStatus,
+                      qrStatus: cat.id === 'qr' ? nextStatusVal : qrStatus
+                    };
+                    onUpdateProject?.(project.id, { pipelineMap: nextMap });
+                    setCashlessSaveMsg(
+                      !isSelected
+                        ? `✅ 「${cat.title}」を選択に追加しました`
+                        : `「${cat.title}」の選択を解除しました`
+                    );
+                    setTimeout(() => setCashlessSaveMsg(null), 2500);
+                  };
+
+                  return (
+                    <div
+                      key={cat.id}
+                      onClick={handleToggleCategory}
+                      style={{
+                        backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                        border: isSelected ? '2px solid #2563eb' : '1.5px solid #cbd5e1',
+                        borderRadius: '0.75rem',
+                        padding: '0.95rem 1rem',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.12)' : '0 1px 2px rgba(15, 23, 42, 0.04)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '0.65rem'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              style={{ width: '18px', height: '18px', accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontSize: '0.96rem', fontWeight: 900, color: isSelected ? '#1e40af' : '#0f172a' }}>
+                              {cat.title}
+                            </span>
+                          </div>
+                          <span style={{
+                            fontSize: '0.7rem',
+                            fontWeight: 800,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '999px',
+                            backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
+                            color: isSelected ? '#ffffff' : '#64748b'
+                          }}>
+                            {isSelected ? '✓ 選択中' : '未選択'}
+                          </span>
+                        </div>
+                        <div style={{
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          color: isSelected ? '#1d4ed8' : '#475569',
+                          marginTop: '0.4rem',
+                          paddingLeft: '1.6rem'
+                        }}>
+                          {cat.subtitle}
+                        </div>
+                      </div>
+
+                      {/* 進捗・備考欄（クリック伝播を止めて個別入力可能） */}
+                      <div
+                        onClick={e => e.stopPropagation()}
+                        style={{
+                          paddingTop: '0.55rem',
+                          borderTop: isSelected ? '1px dashed #93c5fd' : '1px dashed #e2e8f0',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem'
+                        }}
+                      >
+                        <select
+                          className="mock-input"
+                          style={{
+                            marginTop: 0,
+                            width: '115px',
+                            fontSize: '0.76rem',
+                            fontWeight: 700,
+                            backgroundColor: '#ffffff'
+                          }}
+                          value={
+                            ['導入希望', '申込準備中', '審査中', '導入済', '不要'].includes(statusValue)
+                              ? statusValue
+                              : statusValue
+                              ? '導入希望'
+                              : ''
+                          }
+                          onChange={e => {
+                            const val = e.target.value;
+                            setStatusValue(val);
+                            const nextSelected =
+                              val && val !== '不要'
+                                ? Array.from(new Set([...cashlessOptions, cat.id]))
+                                : cashlessOptions.filter(id => id !== cat.id);
+                            setCashlessOptions(nextSelected);
+                            onUpdateProject?.(project.id, {
+                              pipelineMap: {
+                                ...project.pipelineMap,
+                                cashlessOptions: nextSelected,
+                                creditStatus: cat.id === 'credit' ? val : creditStatus,
+                                jcbCreditStatus: cat.id === 'jcb_credit' ? val : jcbCreditStatus,
+                                emoneyStatus: cat.id === 'emoney' ? val : emoneyStatus,
+                                qrStatus: cat.id === 'qr' ? val : qrStatus
+                              }
+                            });
+                          }}
+                        >
+                          <option value="">状態を選択...</option>
+                          <option value="導入希望">導入希望</option>
+                          <option value="申込準備中">申込準備中</option>
+                          <option value="審査中">審査中</option>
+                          <option value="導入済">導入済</option>
+                          <option value="不要">不要</option>
+                        </select>
+                        <input
+                          type="text"
+                          className="mock-input"
+                          style={{ marginTop: 0, flex: 1, fontSize: '0.76rem', backgroundColor: '#ffffff' }}
+                          placeholder="導入予定日・手数料・メモ..."
+                          value={statusValue}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setStatusValue(val);
+                          }}
+                          onBlur={() => {
+                            const nextSelected = statusValue.trim()
+                              ? Array.from(new Set([...cashlessOptions, cat.id]))
+                              : cashlessOptions;
+                            setCashlessOptions(nextSelected);
+                            onUpdateProject?.(project.id, {
+                              pipelineMap: {
+                                ...project.pipelineMap,
+                                cashlessOptions: nextSelected,
+                                creditStatus,
+                                jcbCreditStatus,
+                                emoneyStatus,
+                                qrStatus
+                              }
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 現在の選択サマリー */}
+              <div style={{
+                marginTop: '0.9rem',
+                padding: '0.75rem 1rem',
+                backgroundColor: '#ffffff',
+                borderRadius: '0.6rem',
+                border: '1px solid #cbd5e1',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '0.5rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#334155' }}>
+                    選択中の組み合わせ ({cashlessOptions.length} / 4区分):
+                  </span>
+                  {cashlessOptions.length === 0 ? (
+                    <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>未選択（上のカードをクリックして複数選択できます）</span>
+                  ) : (
+                    CASHLESS_PAYMENT_CATEGORIES.filter(c => cashlessOptions.includes(c.id)).map(c => (
+                      <span
+                        key={c.id}
+                        style={{
+                          fontSize: '0.76rem',
+                          fontWeight: 800,
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '999px',
+                          backgroundColor: '#dbeafe',
+                          color: '#1e40af',
+                          border: '1px solid #93c5fd'
+                        }}
+                      >
+                        {c.title}（{c.subtitle}）
+                      </span>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -1489,17 +1865,26 @@ ${(project.activities || []).map(a => {
                           <option value="架電: 会話 (+3p)|3">架電: 会話 (+3p)</option>
                           <option value="架電: 不在 (+1p)|1">架電: 不在 (+1p)</option>
                           <option value="架電: 折返待ち (+1p)|1">架電: 折返待ち (+1p)</option>
-                          <option value="初動メール (+5p)|5">初動メール (+5p)</option>
-                          <option value="見積書送付 (+5p)|5">見積書送付 (+5p)</option>
-                          <option value="オンラインデモ (+5p)|5">オンラインデモ (+5p)</option>
-                          <option value="訪問デモ (+5p)|5">訪問デモ (+5p)</option>
-                          <option value="来社デモ (+5p)|5">来社デモ (+5p)</option>
+                          <option value="初動メール (+5p)|5">初動メール (+5p) [➔ 初動]</option>
+                          <option value="オンラインデモ (+5p)|5">オンラインデモ (+5p) [➔ デモ]</option>
+                          <option value="訪問デモ (+5p)|5">訪問デモ (+5p) [➔ デモ]</option>
+                          <option value="来社デモ (+5p)|5">来社デモ (+5p) [➔ デモ]</option>
+                          <option value="見積書送付 (+5p)|5">見積書送付 (+5p) [➔ 見積]</option>
+                          <option value="相談メール (+3p)|3">相談メール (+3p) [➔ 検討]</option>
+                          <option value="後追いメール (+2p)|2">後追いメール (+2p) [➔ 後追い]</option>
+                          <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客]</option>
+                          <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注]</option>
                           <option value="訪問 (+3p)|3">訪問 (+3p)</option>
                           <option value="ポスティング (+2p)|2">ポスティング (+2p)</option>
-                          <option value="相談メール (+3p)|3">相談メール (+3p)</option>
-                          <option value="後追いメール (+2p)|2">後追いメール (+2p)</option>
-                          <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p)</option>
                           <option value="資料・メール送付 (+2p)|2">資料・メール送付 (+2p)</option>
+                          <option value="🔄 ステージ移動: 問合せ|0">🔄 ステージ移動: 問合せ (0p)</option>
+                          <option value="🔄 ステージ移動: 初動|0">🔄 ステージ移動: 初動 (0p)</option>
+                          <option value="🔄 ステージ移動: デモ|0">🔄 ステージ移動: デモ (0p)</option>
+                          <option value="🔄 ステージ移動: 見積|0">🔄 ステージ移動: 見積 (0p)</option>
+                          <option value="🔄 ステージ移動: 検討|0">🔄 ステージ移動: 検討 (0p)</option>
+                          <option value="🔄 ステージ移動: 後追い|0">🔄 ステージ移動: 後追い (0p)</option>
+                          <option value="🔄 ステージ移動: kz送客|0">🔄 ステージ移動: kz送客 (0p)</option>
+                          <option value="🔄 ステージ移動: 受注|0">🔄 ステージ移動: 受注 (0p)</option>
                         </select>
                         <input
                           type="text"
@@ -1560,8 +1945,8 @@ ${(project.activities || []).map(a => {
                         const synced = syncProjectWithActivities(project, nextActs);
                         onUpdateProject(project.id, synced);
                         setIsAddingActivity(false);
-                        setActivityFeedbackMsg(`✅ 活動「${newAct.type}」を追加しました（累計: ${synced.clinicPoints}p）`);
-                        setTimeout(() => setActivityFeedbackMsg(null), 3000);
+                        setActivityFeedbackMsg(`✅ 活動「${newAct.type}」を追加しました（進捗フロー・カンバン連動: 【${synced.status}】 / 累計: ${synced.clinicPoints}p）`);
+                        setTimeout(() => setActivityFeedbackMsg(null), 3500);
                       }}
                     >
                       <Save size={13} /> 追加して保存
@@ -1625,16 +2010,25 @@ ${(project.activities || []).map(a => {
                                   <option value="架電: 会話 (+3p)|3">架電: 会話 (+3p)</option>
                                   <option value="架電: 不在 (+1p)|1">架電: 不在 (+1p)</option>
                                   <option value="架電: 折返待ち (+1p)|1">架電: 折返待ち (+1p)</option>
-                                  <option value="初動メール (+5p)|5">初動メール (+5p)</option>
-                                  <option value="見積書送付 (+5p)|5">見積書送付 (+5p)</option>
-                                  <option value="オンラインデモ (+5p)|5">オンラインデモ (+5p)</option>
-                                  <option value="訪問デモ (+5p)|5">訪問デモ (+5p)</option>
-                                  <option value="来社デモ (+5p)|5">来社デモ (+5p)</option>
+                                  <option value="初動メール (+5p)|5">初動メール (+5p) [➔ 初動]</option>
+                                  <option value="オンラインデモ (+5p)|5">オンラインデモ (+5p) [➔ デモ]</option>
+                                  <option value="訪問デモ (+5p)|5">訪問デモ (+5p) [➔ デモ]</option>
+                                  <option value="来社デモ (+5p)|5">来社デモ (+5p) [➔ デモ]</option>
+                                  <option value="見積書送付 (+5p)|5">見積書送付 (+5p) [➔ 見積]</option>
+                                  <option value="相談メール (+3p)|3">相談メール (+3p) [➔ 検討]</option>
+                                  <option value="後追いメール (+2p)|2">後追いメール (+2p) [➔ 後追い]</option>
+                                  <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客]</option>
+                                  <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注]</option>
                                   <option value="訪問 (+3p)|3">訪問 (+3p)</option>
                                   <option value="ポスティング (+2p)|2">ポスティング (+2p)</option>
-                                  <option value="相談メール (+3p)|3">相談メール (+3p)</option>
-                                  <option value="後追いメール (+2p)|2">後追いメール (+2p)</option>
-                                  <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p)</option>
+                                  <option value="🔄 ステージ移動: 問合せ|0">🔄 ステージ移動: 問合せ (0p)</option>
+                                  <option value="🔄 ステージ移動: 初動|0">🔄 ステージ移動: 初動 (0p)</option>
+                                  <option value="🔄 ステージ移動: デモ|0">🔄 ステージ移動: デモ (0p)</option>
+                                  <option value="🔄 ステージ移動: 見積|0">🔄 ステージ移動: 見積 (0p)</option>
+                                  <option value="🔄 ステージ移動: 検討|0">🔄 ステージ移動: 検討 (0p)</option>
+                                  <option value="🔄 ステージ移動: 後追い|0">🔄 ステージ移動: 後追い (0p)</option>
+                                  <option value="🔄 ステージ移動: kz送客|0">🔄 ステージ移動: kz送客 (0p)</option>
+                                  <option value="🔄 ステージ移動: 受注|0">🔄 ステージ移動: 受注 (0p)</option>
                                 </select>
                                 <input
                                   type="text"
@@ -1699,8 +2093,8 @@ ${(project.activities || []).map(a => {
                                 const synced = syncProjectWithActivities(project, nextActs);
                                 onUpdateProject(project.id, synced);
                                 setEditingActivityId(null);
-                                setActivityFeedbackMsg(`✅ 活動履歴を修正しました（累計ポイント: ${synced.clinicPoints}p）`);
-                                setTimeout(() => setActivityFeedbackMsg(null), 3000);
+                                setActivityFeedbackMsg(`✅ 活動履歴を修正しました（進捗フロー・カンバン連動: 【${synced.status}】 / 累計: ${synced.clinicPoints}p）`);
+                                setTimeout(() => setActivityFeedbackMsg(null), 3500);
                               }}
                             >
                               <Save size={13} /> 修正を保存
@@ -1798,8 +2192,8 @@ ${(project.activities || []).map(a => {
                                 const nextActs = (project.activities || []).filter(item => item.id !== act.id);
                                 const synced = syncProjectWithActivities(project, nextActs);
                                 onUpdateProject(project.id, synced);
-                                setActivityFeedbackMsg(`🗑️ 活動「${act.type}」を削除しました（累計ポイント: ${synced.clinicPoints}p）`);
-                                setTimeout(() => setActivityFeedbackMsg(null), 3000);
+                                setActivityFeedbackMsg(`🗑️ 活動「${act.type}」を削除しました（進捗フロー・カンバン連動: 【${synced.status}】 / 累計: ${synced.clinicPoints}p）`);
+                                setTimeout(() => setActivityFeedbackMsg(null), 3500);
                               }
                             }}
                             style={{
