@@ -1,6 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { Project, ProjectStatus, NextAction } from '../types';
-import { SALES_PROGRESS_FLOW, normalizeProgressStage, getClinicTotalPoints, isBtoBDealerProject } from '../types';
+import type { Project, ProjectStatus, NextAction, IntroPhaseId } from '../types';
+import {
+  SALES_PROGRESS_FLOW,
+  INTRO_FOUR_PHASES,
+  getProjectSpecAndGateSummary,
+  normalizeProgressStage,
+  getClinicTotalPoints,
+  isBtoBDealerProject
+} from '../types';
+import { useProjects } from '../context/ProjectContext';
 import { ChevronLeft, ChevronRight, RotateCcw, Trophy, Columns, Maximize2, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 interface Column {
@@ -28,7 +36,11 @@ const STAGE_COLORS: Record<string, { bg: string; headerBg: string; border: strin
   '後追い': { bg: '#fff1f2', headerBg: '#ffe4e6', border: '#fda4af', text: '#9f1239', badgeBg: '#e11d48' },
   'kz送客': { bg: '#ecfeff', headerBg: '#cffafe', border: '#67e8f9', text: '#0f766e', badgeBg: '#0891b2' },
   '受注':   { bg: '#ecfdf5', headerBg: '#a7f3d0', border: '#34d399', text: '#065f46', badgeBg: '#059669' },
-  '失注':   { bg: '#f8fafc', headerBg: '#e2e8f0', border: '#94a3b8', text: '#475569', badgeBg: '#475569' }
+  '失注':   { bg: '#f8fafc', headerBg: '#e2e8f0', border: '#94a3b8', text: '#475569', badgeBg: '#475569' },
+  'PHASE1': { bg: '#eff6ff', headerBg: '#dbeafe', border: '#93c5fd', text: '#1e3a8a', badgeBg: '#1e3a8a' },
+  'PHASE2': { bg: '#f0f9ff', headerBg: '#bae6fd', border: '#7dd3fc', text: '#0369a1', badgeBg: '#0284c7' },
+  'PHASE3': { bg: '#fff7ed', headerBg: '#ffedd5', border: '#fdba74', text: '#9a3412', badgeBg: '#ea580c' },
+  'PHASE4': { bg: '#ecfdf5', headerBg: '#a7f3d0', border: '#34d399', text: '#065f46', badgeBg: '#059669' }
 };
 
 export default function ProjectKanban({
@@ -40,6 +52,8 @@ export default function ProjectKanban({
   onProjectClick,
   actions
 }: Props) {
+  const { updateProject } = useProjects();
+  const [kanbanMode, setKanbanMode] = useState<'sales_8stage' | 'intro_4phase'>('sales_8stage');
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverColId, setDragOverColId] = useState<string | null>(null);
   const [compactFit, setCompactFit] = useState<boolean>(false);
@@ -51,8 +65,15 @@ export default function ProjectKanban({
   const isSyncingScroll = useRef<boolean>(false);
   const [scrollWidthPx, setScrollWidthPx] = useState<number>(2200);
 
-  // 標準8段階フロー＋失注カラムを確実に構築
+  // 標準8段階フロー または PDF Page 2 導入4フェーズカラムを構築
   const displayColumns: Column[] = React.useMemo(() => {
+    if (kanbanMode === 'intro_4phase') {
+      return INTRO_FOUR_PHASES.map(ph => ({
+        id: ph.id,
+        title: ph.title,
+        icon: null
+      }));
+    }
     const baseCols: Column[] = SALES_PROGRESS_FLOW.map(stage => ({
       id: stage,
       title: stage,
@@ -67,7 +88,27 @@ export default function ProjectKanban({
       baseCols.push({ id: '失注', title: '🗄️ アーカイブ(失注)', icon: null });
     }
     return baseCols;
-  }, [columns, showArchivedCol]);
+  }, [columns, showArchivedCol, kanbanMode]);
+
+  const matchColumnForMode = (p: Project, colId: string): boolean => {
+    if (kanbanMode === 'intro_4phase') {
+      if (p.status === '失注') return false;
+      const gate = getProjectSpecAndGateSummary(p);
+      return gate.introPhase === colId;
+    }
+    return filterByColumn(p, colId);
+  };
+
+  const handleMoveIntroPhase = (project: Project, targetPhase: IntroPhaseId) => {
+    // updateProject 内の autoSyncProjectUpdates により、introPhase 変更時に営業8段階ステータス（kz送客/受注）・日付・活動履歴も全自動連動
+    updateProject(project.id, {
+      pipelineMap: {
+        ...(project.pipelineMap || {}),
+        introPhase: targetPhase,
+        kzGrantAdopted: targetPhase === 'PHASE3' || targetPhase === 'PHASE4' ? true : false
+      }
+    });
+  };
 
   // カンバン外枠内の横スクロール幅を計測し、上部スクロールバーと同期
   useEffect(() => {
@@ -147,6 +188,13 @@ export default function ProjectKanban({
     setDragOverColId(null);
 
     if (!projectId || targetColumnId === '未分類') return;
+    if (kanbanMode === 'intro_4phase') {
+      const targetProj = projects.find(p => p.id === projectId);
+      if (targetProj) {
+        handleMoveIntroPhase(targetProj, targetColumnId as IntroPhaseId);
+      }
+      return;
+    }
     onDropProject(projectId, targetColumnId);
   };
 
@@ -179,8 +227,43 @@ export default function ProjectKanban({
           flexWrap: 'wrap',
           gap: '0.5rem'
         }}>
-          {/* 左側：横スクロール操作ボタン＋ステージ直接ジャンプバー */}
+          {/* 左側：カンバンモード切替（営業8段階 ⇔ PDF準拠・導入4フェーズ）＋横スクロール操作 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'inline-flex', backgroundColor: '#f1f5f9', padding: '0.2rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1', marginRight: '0.35rem' }}>
+              <button
+                type="button"
+                onClick={() => setKanbanMode('sales_8stage')}
+                style={{
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '0.38rem',
+                  border: 'none',
+                  backgroundColor: kanbanMode === 'sales_8stage' ? '#1e40af' : 'transparent',
+                  color: kanbanMode === 'sales_8stage' ? '#ffffff' : '#334155',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                📊 営業8段階カンバン
+              </button>
+              <button
+                type="button"
+                onClick={() => setKanbanMode('intro_4phase')}
+                style={{
+                  padding: '0.25rem 0.65rem',
+                  borderRadius: '0.38rem',
+                  border: 'none',
+                  backgroundColor: kanbanMode === 'intro_4phase' ? '#ea580c' : 'transparent',
+                  color: kanbanMode === 'intro_4phase' ? '#ffffff' : '#334155',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                🚀 PDF準拠：導入4フェーズ (PHASE 1〜4)
+              </button>
+            </div>
+
             {!compactFit && (
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginRight: '0.25rem' }}>
                 <button
@@ -230,7 +313,7 @@ export default function ProjectKanban({
               ステージ移動:
             </span>
             {displayColumns.map((col, idx) => {
-              const count = projects.filter(p => filterByColumn(p, col.id)).length;
+              const count = projects.filter(p => matchColumnForMode(p, col.id)).length;
               const theme = STAGE_COLORS[col.id] || STAGE_COLORS['問合せ'];
               return (
                 <button
@@ -252,7 +335,7 @@ export default function ProjectKanban({
                     gap: '0.22rem'
                   }}
                 >
-                  <span>{col.id === '失注' ? '🗄️失注' : `${idx + 1}.${col.id}`}</span>
+                  <span>{col.id === '失注' ? '🗄️失注' : kanbanMode === 'intro_4phase' ? col.title : `${idx + 1}.${col.id}`}</span>
                   <span style={{
                     backgroundColor: '#ffffff',
                     padding: '0 0.32rem',
@@ -357,9 +440,10 @@ export default function ProjectKanban({
         }}
       >
         {displayColumns.map((col, colIndex) => {
-          const colProjects = projects.filter(p => filterByColumn(p, col.id));
+          const colProjects = projects.filter(p => matchColumnForMode(p, col.id));
           const theme = STAGE_COLORS[col.id] || STAGE_COLORS['問合せ'];
           const isDragOver = dragOverColId === col.id;
+          const phaseMeta = INTRO_FOUR_PHASES.find(ph => ph.id === col.id);
 
           return (
             <div
@@ -373,9 +457,9 @@ export default function ProjectKanban({
               }}
               onDrop={(e) => handleDrop(e, col.id)}
               style={{
-                flex: compactFit ? undefined : '0 0 245px',
-                minWidth: compactFit ? 0 : '245px',
-                maxWidth: compactFit ? '100%' : '245px',
+                flex: compactFit ? undefined : kanbanMode === 'intro_4phase' ? '0 0 310px' : '0 0 245px',
+                minWidth: compactFit ? 0 : kanbanMode === 'intro_4phase' ? '310px' : '245px',
+                maxWidth: compactFit ? '100%' : kanbanMode === 'intro_4phase' ? '310px' : '245px',
                 height: '100%',
                 backgroundColor: isDragOver ? '#eff6ff' : theme.bg,
                 borderRadius: '0.7rem',
@@ -396,54 +480,60 @@ export default function ProjectKanban({
                   borderRadius: '0.5rem',
                   padding: compactFit ? '0.38rem 0.45rem' : '0.45rem 0.65rem',
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
+                  flexDirection: 'column',
                   flexShrink: 0,
-                  gap: '0.25rem'
+                  gap: '0.2rem'
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
-                  {col.id !== '失注' && colIndex < SALES_PROGRESS_FLOW.length && (
-                    <span style={{
-                      backgroundColor: theme.badgeBg,
-                      color: '#ffffff',
-                      fontSize: '0.66rem',
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', minWidth: 0 }}>
+                    {col.id !== '失注' && (
+                      <span style={{
+                        backgroundColor: theme.badgeBg,
+                        color: '#ffffff',
+                        fontSize: '0.66rem',
+                        fontWeight: 900,
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        {colIndex + 1}
+                      </span>
+                    )}
+                    <h3 style={{
+                      margin: 0,
+                      fontSize: compactFit ? '0.78rem' : '0.88rem',
                       fontWeight: 900,
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '999px',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
+                      color: theme.text,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
                     }}>
-                      {colIndex + 1}
-                    </span>
-                  )}
-                  <h3 style={{
-                    margin: 0,
-                    fontSize: compactFit ? '0.78rem' : '0.9rem',
-                    fontWeight: 900,
+                      {col.title}
+                    </h3>
+                  </div>
+                  <span style={{
+                    backgroundColor: '#ffffff',
                     color: theme.text,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis'
+                    border: `1px solid ${theme.border}`,
+                    fontWeight: 900,
+                    fontSize: compactFit ? '0.68rem' : '0.74rem',
+                    padding: '0.08rem 0.42rem',
+                    borderRadius: '999px',
+                    flexShrink: 0
                   }}>
-                    {col.title}
-                  </h3>
+                    {colProjects.length}件
+                  </span>
                 </div>
-                <span style={{
-                  backgroundColor: '#ffffff',
-                  color: theme.text,
-                  border: `1px solid ${theme.border}`,
-                  fontWeight: 900,
-                  fontSize: compactFit ? '0.68rem' : '0.74rem',
-                  padding: '0.08rem 0.42rem',
-                  borderRadius: '999px',
-                  flexShrink: 0
-                }}>
-                  {colProjects.length}件
-                </span>
+                {phaseMeta && (
+                  <div style={{ fontSize: '0.68rem', color: '#475569', fontWeight: 700 }}>
+                    {phaseMeta.subtitle}
+                  </div>
+                )}
               </div>
 
               {/* カード一覧（各列の内部で独立して縦スクロール） */}
@@ -588,6 +678,83 @@ export default function ProjectKanban({
                         )}
                       </div>
 
+                      {/* PDF準拠：7 STEP仕様・公的書類・クレカ審査・kz報酬・現地調査 進捗＆ストッパーバッジ */}
+                      {!isArchived && (() => {
+                        const gate = getProjectSpecAndGateSummary(project);
+                        const showExtendedBadges =
+                          kanbanMode === 'intro_4phase' ||
+                          currentStage === 'kz送客' ||
+                          currentStage === '受注' ||
+                          gate.specCompletedCount > 0 ||
+                          gate.docsReadyCount > 0 ||
+                          gate.surveyReadyCount > 0;
+                        if (!showExtendedBadges) return null;
+
+                        return (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.22rem', marginTop: '0.15rem' }}>
+                            <span style={{
+                              fontSize: '0.63rem',
+                              fontWeight: 800,
+                              padding: '0.08rem 0.35rem',
+                              borderRadius: '0.25rem',
+                              backgroundColor: gate.specCompletedCount === 7 ? '#dcfce7' : '#eff6ff',
+                              color: gate.specCompletedCount === 7 ? '#166534' : '#1e40af',
+                              border: '1px solid #bfdbfe'
+                            }}>
+                              🎨 仕様 {gate.specCompletedCount}/7
+                            </span>
+                            <span style={{
+                              fontSize: '0.63rem',
+                              fontWeight: 800,
+                              padding: '0.08rem 0.35rem',
+                              borderRadius: '0.25rem',
+                              backgroundColor: gate.docsReadyCount === 4 ? '#dcfce7' : '#ecfeff',
+                              color: gate.docsReadyCount === 4 ? '#166534' : '#0f766e',
+                              border: '1px solid #a5f3fc'
+                            }}>
+                              📄 書類 {gate.docsReadyCount}/4
+                            </span>
+                            <span style={{
+                              fontSize: '0.63rem',
+                              fontWeight: 800,
+                              padding: '0.08rem 0.35rem',
+                              borderRadius: '0.25rem',
+                              backgroundColor: gate.creditApproved ? '#dcfce7' : '#fef3c7',
+                              color: gate.creditApproved ? '#166534' : '#b45309',
+                              border: '1px solid #fde68a'
+                            }} title="本体設置の必須前提条件：クレジット審査">
+                              {gate.creditApproved ? '💳 クレカ審査OK' : '⚠️ クレカ審査前'}
+                            </span>
+                            {gate.hasQrOrEmoney && !project.pipelineMap?.qrEmoneyApproved && (
+                              <span style={{
+                                fontSize: '0.63rem',
+                                fontWeight: 800,
+                                padding: '0.08rem 0.35rem',
+                                borderRadius: '0.25rem',
+                                backgroundColor: '#fff7ed',
+                                color: '#c2410c',
+                                border: '1px solid #fdba74'
+                              }} title="電子マネー・QR決済はクレジットより1か月以上審査に時間がかかる場合があります">
+                                ⏳ QR長期化注意
+                              </span>
+                            )}
+                            {(currentStage === '受注' || gate.introPhase === 'PHASE3' || gate.introPhase === 'PHASE4') && (
+                              <span style={{
+                                fontSize: '0.63rem',
+                                fontWeight: 800,
+                                padding: '0.08rem 0.35rem',
+                                borderRadius: '0.25rem',
+                                backgroundColor: gate.kzFeePaid ? '#dcfce7' : '#fee2e2',
+                                color: gate.kzFeePaid ? '#166534' : '#b91c1c',
+                                border: '1px solid #fca5a5'
+                              }} title="KIZASHI（コンサルタント）報酬はテマサック本体設置前にお支払いが必要">
+                                {gate.kzFeePaid ? '💰 kz報酬支払済' : '⚠️ kz報酬(設置前)'}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+
                       {isArchived && project.lostReason && (
                         <div style={{
                           fontSize: '0.7rem',
@@ -642,6 +809,72 @@ export default function ProjectKanban({
                           >
                             <RotateCcw size={11} /> 営業リストへ復元
                           </button>
+                        ) : kanbanMode === 'intro_4phase' ? (
+                          (() => {
+                            const gate = getProjectSpecAndGateSummary(project);
+                            const phaseIds: IntroPhaseId[] = ['PHASE1', 'PHASE2', 'PHASE3', 'PHASE4'];
+                            const pIdx = phaseIds.indexOf(gate.introPhase);
+                            const prevPh = pIdx > 0 ? phaseIds[pIdx - 1] : null;
+                            const nextPh = pIdx < phaseIds.length - 1 ? phaseIds[pIdx + 1] : null;
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={!prevPh}
+                                  onClick={() => prevPh && handleMoveIntroPhase(project, prevPh)}
+                                  style={{
+                                    padding: '0.2rem 0.35rem',
+                                    borderRadius: '0.3rem',
+                                    border: '1px solid #cbd5e1',
+                                    backgroundColor: prevPh ? '#f8fafc' : '#f1f5f9',
+                                    color: prevPh ? '#0f172a' : '#cbd5e1',
+                                    cursor: prevPh ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <ChevronLeft size={13} />
+                                </button>
+                                <select
+                                  value={gate.introPhase}
+                                  onChange={(e) => handleMoveIntroPhase(project, e.target.value as IntroPhaseId)}
+                                  style={{
+                                    flex: 1,
+                                    minWidth: 0,
+                                    padding: '0.18rem 0.25rem',
+                                    borderRadius: '0.3rem',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800,
+                                    color: '#1e293b',
+                                    backgroundColor: '#f8fafc',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {INTRO_FOUR_PHASES.map(ph => (
+                                    <option key={ph.id} value={ph.id}>{ph.title}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  disabled={!nextPh}
+                                  onClick={() => nextPh && handleMoveIntroPhase(project, nextPh)}
+                                  style={{
+                                    padding: '0.2rem 0.35rem',
+                                    borderRadius: '0.3rem',
+                                    border: nextPh ? '1px solid #ea580c' : '1px solid #cbd5e1',
+                                    backgroundColor: nextPh ? '#fff7ed' : '#f1f5f9',
+                                    color: nextPh ? '#c2410c' : '#cbd5e1',
+                                    cursor: nextPh ? 'pointer' : 'not-allowed',
+                                    display: 'flex',
+                                    alignItems: 'center'
+                                  }}
+                                >
+                                  <ChevronRight size={13} />
+                                </button>
+                              </>
+                            );
+                          })()
                         ) : (
                           <>
                             <button

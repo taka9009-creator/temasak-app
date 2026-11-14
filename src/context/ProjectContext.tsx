@@ -19,7 +19,7 @@ import {
   createActionFromGlobalRule
 } from '../utils/actionRules';
 import { buildRoster42Dataset } from '../utils/roster42Data';
-import { ACTION_POINT_RULES, SALES_PROGRESS_FLOW, getClinicTotalPoints, normalizeProgressStage } from '../types';
+import { ACTION_POINT_RULES, SALES_PROGRESS_FLOW, getClinicTotalPoints, normalizeProgressStage, autoSyncProjectUpdates } from '../types';
 import type { Project, NextAction, ProjectStatus, ActionPriority, Activity, QuickCallOutcome, LostReasonType, SalesProgressStage } from '../types';
 import { useWorkflow } from './WorkflowContext';
 import { useRules } from './RuleContext';
@@ -122,15 +122,42 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [actions]);
 
+  // Firestore用に再帰的に undefined を除去/null化するヘルパー（ネストされた pipelineMap 内の undefined エラー防止 ＆ クリアされた日付の復活防止）
+  const sanitizeForFirestore = (val: any): any => {
+    if (val === undefined) return null;
+    if (val === null || typeof val !== 'object') return val;
+    if (Array.isArray(val)) {
+      return val.map(item => sanitizeForFirestore(item));
+    }
+    const out: Record<string, any> = {};
+    Object.keys(val).forEach(k => {
+      const v = val[k];
+      out[k] = v === undefined ? null : sanitizeForFirestore(v);
+    });
+    return out;
+  };
+
   const saveProjectToFirestore = async (proj: Project) => {
     if (!user || user.id === 'demo-user-1') return;
     if (!isValidProductionProjectId(proj.id)) return;
     try {
       const projectRef = doc(db, 'projects', proj.id);
-      const cleanProject: Record<string, any> = { ...proj, user_id: user.id };
-      Object.keys(cleanProject).forEach(k => {
-        if (cleanProject[k] === undefined) delete cleanProject[k];
-      });
+      const rawProject: Record<string, any> = {
+        ...proj,
+        user_id: user.id,
+        initialEmailDate: proj.initialEmailDate ?? null,
+        estimateSentDate: proj.estimateSentDate ?? null,
+        demoDate: proj.demoDate ?? null,
+        visitDate: proj.visitDate ?? null,
+        postingDate: proj.postingDate ?? null,
+        consultEmailDate: proj.consultEmailDate ?? null,
+        followupEmailDate: proj.followupEmailDate ?? null,
+        kzReferralDate: proj.kzReferralDate ?? null,
+        orderDate: proj.orderDate ?? null,
+        surveyDate: proj.surveyDate ?? null,
+        installationDate: proj.installationDate ?? null,
+      };
+      const cleanProject = sanitizeForFirestore(rawProject);
       await setDoc(projectRef, cleanProject, { merge: true });
     } catch (e) {
       console.error('Failed to sync project to Firestore:', e);
@@ -208,24 +235,25 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             qrStatus: p.qr_status,
           },
           clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
-          initialEmailDate: p.initialEmailDate,
-          estimateSentDate: p.estimateSentDate,
-          demoType: p.demoType,
-          demoDate: p.demoDate,
-          visitDate: p.visitDate,
-          postingDate: p.postingDate,
-          consultEmailDate: p.consultEmailDate,
-          followupEmailDate: p.followupEmailDate,
-          kzReferralDate: p.kzReferralDate,
-          orderDate: p.orderDate,
-          clinicHours: p.clinicHours,
-          closedDays: p.closedDays,
-          websiteUrl: p.websiteUrl,
-          reservationSystem: p.reservationSystem,
-          aiSummary: p.aiSummary,
-          aiRecommendation: p.aiRecommendation,
+          initialEmailDate: p.initialEmailDate || undefined,
+          estimateSentDate: p.estimateSentDate || undefined,
+          demoType: p.demoType || undefined,
+          demoDate: p.demoDate || undefined,
+          visitDate: p.visitDate || undefined,
+          postingDate: p.postingDate || undefined,
+          consultEmailDate: p.consultEmailDate || undefined,
+          followupEmailDate: p.followupEmailDate || undefined,
+          kzReferralDate: p.kzReferralDate || undefined,
+          orderDate: p.orderDate || undefined,
+          surveyDate: p.surveyDate || undefined,
+          clinicHours: p.clinicHours || undefined,
+          closedDays: p.closedDays || undefined,
+          websiteUrl: p.websiteUrl || undefined,
+          reservationSystem: p.reservationSystem || undefined,
+          aiSummary: p.aiSummary || undefined,
+          aiRecommendation: p.aiRecommendation || undefined,
           activities: Array.isArray(p.activities) ? p.activities : [],
-          installationDate: p.installationDate || p.installation_date,
+          installationDate: p.installationDate || p.installation_date || undefined,
           createdAt: p.createdAt || p.created_at || new Date().toISOString(),
           updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
         });
@@ -844,13 +872,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         nextDeadline = format(addDays(new Date(), 3), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === 'kz送客') {
-        nextTitle = '【kz送客・補助金申請中】補助金コンサル（kz）進捗確認 ＆ 採択後の「🎉受注」確定フォロー';
-        nextMemo = `補助金コンサルタント（kz）へ送客完了（送客日: ${targetDate} / +5p / 進捗: kz送客）。補助金採択後に「🎉受注 (+10p)」へ確定させる。`;
-        nextDeadline = format(addDays(new Date(), 7), 'yyyy-MM-dd');
+        nextTitle = '【kz送客・PHASE1〜2】ACT1:GbizID・公的書類3点 ／ ACT2:同意書・CL希望シート ／ ACT4:7STEP仕様決定';
+        nextMemo = `補助金コンサル（KIZASHI）へ送客完了（送客日: ${targetDate} / +5p）。①GbizID・納税証明・確定申告・登記簿(法人のみ)、②同意書・CL希望シート署名受領、③現地調査日程調整、④7STEP仕様決定を進め、採択後に「🎉受注 (+10p)」へ確定させる。`;
+        nextDeadline = format(addDays(new Date(), 5), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === '受注') {
-        nextTitle = '【受注完了】導入準備・現地調査および設置日程の調整';
-        nextMemo = `受注確定（受注日: ${targetDate} / +10p）。レセコン連携手配・キャッシュレス申込・設置スケジュールの確定を進める。`;
+        nextTitle = '【受注・PHASE3〜4】⑦KIZASHI報酬支払確認(設置前必須) ＆ 注文書作成・クレカ審査通過・現地調査5項目確認';
+        nextMemo = `受注・交付決定確定（受注日: ${targetDate} / +10p）。本体設置前の⑦KIZASHI報酬支払確認、クレジット審査通過確認（設置前提条件）、現地調査5項目（レセコンIP・プロバイダ書類）および搬入設置日程の確定を進める。`;
         nextDeadline = format(addDays(new Date(), 2), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === '面談設定') {
@@ -931,12 +959,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const kzAction: NextAction = {
         id: uuidv4(),
         projectId: project.id,
-        title: '【kz送客・補助金申請中】補助金コンサル（kz）進捗確認 ＆ 採択後の「🎉受注」確定フォロー',
+        title: '【kz送客・PHASE1〜2】ACT1:GbizID・公的書類3点 ／ ACT2:同意書・CL希望シート ／ ACT4:7STEP仕様決定',
         assignee: project.salesRep || '松浦 貴文',
-        deadline: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
+        deadline: format(addDays(new Date(), 5), 'yyyy-MM-dd'),
         priority: '高',
         status: '未完了',
-        memo: '進捗フロー「kz送客（補助金コンサルタント送客済・採択後に受注）」へ移行。採択結果を確認し次第、受注へ進める。',
+        memo: '進捗フロー「kz送客（KIZASHI送客済・採択後に受注）」へ移行。ACT1(GbizID・納税証明・確定申告・登記簿)・ACT2(同意書・CL希望シート)・ACT3(現調5項目)・ACT4(7STEP仕様)を進め、採択後に受注へ進める。',
         createdAt: todayStr
       };
       newActionsToInsert = [kzAction, ...newActionsToInsert];
@@ -1022,7 +1050,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // 進捗フロー・案件カンバンの移動を「活動履歴」にも自動記録して3方向完全連動
+        // 進捗フロー・案件カンバンの移動を「活動履歴」および「導入4フェーズ」にも自動記録して全方位連動
         const stageMoveActivity: Activity = {
           id: uuidv4(),
           projectId: p.id,
@@ -1031,6 +1059,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           content: `進捗フロー・案件カンバンを「${prevStage}」から「${newStatus}」へ移動しました。`,
           points: 0
         };
+
+        const currentPm = p.pipelineMap || {};
+        let nextIntroPhase = currentPm.introPhase;
+        let nextKzGrantAdopted = currentPm.kzGrantAdopted;
+        if (newStatus === '受注') {
+          nextIntroPhase = currentPm.introPhase === 'PHASE4' ? 'PHASE4' : 'PHASE3';
+          nextKzGrantAdopted = true;
+        } else if (newStatus === 'kz送客') {
+          nextIntroPhase = currentPm.introPhase === 'PHASE2' ? 'PHASE2' : 'PHASE1';
+          nextKzGrantAdopted = false;
+        } else if (targetStageIdx >= 0 && targetStageIdx < 6) {
+          nextIntroPhase = 'PHASE1';
+          nextKzGrantAdopted = false;
+        }
 
         const updated: Project = {
           ...p,
@@ -1046,6 +1088,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           memo: nextMemo.trim(),
           ballHolder: nextBallHolder,
           isImplementationProject: newIsImplementation,
+          pipelineMap: {
+            ...currentPm,
+            introPhase: nextIntroPhase,
+            kzGrantAdopted: nextKzGrantAdopted
+          },
           activities: [stageMoveActivity, ...(p.activities || [])],
           lastActivityAt: todayStr,
           updatedAt: nowIso
@@ -1154,9 +1201,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       return;
     }
     setProjects(prev => {
-      const next = prev.map(p =>
-        p.id === projectId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
-      );
+      const next = prev.map(p => {
+        if (p.id !== projectId) return p;
+        const syncedUpdates = autoSyncProjectUpdates(p, updates);
+        return {
+          ...p,
+          ...syncedUpdates,
+          updatedAt: new Date().toISOString()
+        };
+      });
       const target = next.find(p => p.id === projectId);
       if (target) {
         saveProjectToFirestore(target);

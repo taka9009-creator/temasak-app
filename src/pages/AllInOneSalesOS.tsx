@@ -37,6 +37,7 @@ import {
   ACTION_POINT_RULES,
   SALES_PROGRESS_FLOW,
   CASHLESS_PAYMENT_CATEGORIES,
+  getProjectSpecAndGateSummary,
   getClinicTotalPoints,
   normalizeProgressStage,
   isBtoBDealerProject
@@ -117,7 +118,7 @@ export default function AllInOneSalesOS() {
 
   // 詳細ドロワー / AIモーダル状態
   const [detailProjectId, setDetailProjectId] = useState<string | null>(null);
-  const [detailInitialTab, setDetailInitialTab] = useState<'basicInfo' | 'activities' | 'cashlessStatus'>('basicInfo');
+  const [detailInitialTab, setDetailInitialTab] = useState<'basicInfo' | 'activities' | 'cashlessStatus' | 'deviceInfo' | 'prepStatus' | 'installation'>('basicInfo');
   const [aiModalProject, setAiModalProject] = useState<Project | null>(null);
   const [aiScene, setAiScene] = useState<'auto' | 'initial_email' | 'consult_email' | 'followup_email' | 'estimate' | 'absent' | 'callback' | 'talked' | 'subsidy'>('auto');
   const [customDraftSubject, setCustomDraftSubject] = useState('');
@@ -2473,36 +2474,72 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     )}
 
                     {(() => {
-                      const pm = project.pipelineMap || {};
-                      const selectedCashless = Array.isArray(pm.cashlessOptions)
-                        ? pm.cashlessOptions
-                        : [
-                            pm.creditStatus ? 'credit' : null,
-                            pm.jcbCreditStatus ? 'jcb_credit' : null,
-                            pm.emoneyStatus ? 'emoney' : null,
-                            pm.qrStatus ? 'qr' : null
-                          ].filter(Boolean) as string[];
-                      return CASHLESS_PAYMENT_CATEGORIES.filter(c => selectedCashless.includes(c.id)).map(c => (
-                        <span
-                          key={c.id}
-                          onClick={() => {
-                            setDetailInitialTab('cashlessStatus');
-                            setDetailProjectId(project.id);
-                          }}
-                          title={`キャッシュレス決済選択: ${c.title}（${c.subtitle}）— クリックで編集`}
-                          style={{
-                            padding: '0.14rem 0.55rem',
-                            borderRadius: '0.3rem',
-                            backgroundColor: '#eff6ff',
-                            color: '#1e40af',
-                            border: '1px solid #93c5fd',
-                            fontWeight: 800,
-                            cursor: 'pointer'
-                          }}
-                        >
-                          💳 {c.shortLabel}
-                        </span>
-                      ));
+                      const gate = getProjectSpecAndGateSummary(project);
+                      return (
+                        <>
+                          {CASHLESS_PAYMENT_CATEGORIES.filter(c => gate.selectedCashless.includes(c.id)).map(c => (
+                            <span
+                              key={c.id}
+                              onClick={() => {
+                                setDetailInitialTab('cashlessStatus');
+                                setDetailProjectId(project.id);
+                              }}
+                              title={`キャッシュレス決済選択: ${c.title}（${c.subtitle}）— クリックで編集`}
+                              style={{
+                                padding: '0.14rem 0.55rem',
+                                borderRadius: '0.3rem',
+                                backgroundColor: '#eff6ff',
+                                color: '#1e40af',
+                                border: '1px solid #93c5fd',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              💳 {c.shortLabel}
+                            </span>
+                          ))}
+                          {gate.specCompletedCount > 0 && (
+                            <span
+                              onClick={() => {
+                                setDetailInitialTab('deviceInfo');
+                                setDetailProjectId(project.id);
+                              }}
+                              title="クリックして7 STEP 仕様選択を編集"
+                              style={{
+                                padding: '0.14rem 0.55rem',
+                                borderRadius: '0.3rem',
+                                backgroundColor: gate.specCompletedCount === 7 ? '#dcfce7' : '#fff7ed',
+                                color: gate.specCompletedCount === 7 ? '#166534' : '#c2410c',
+                                border: '1px solid #fdba74',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              🎨 仕様 {gate.specCompletedCount}/7 STEP
+                            </span>
+                          )}
+                          {(currentProgressStage === 'kz送客' || currentProgressStage === '受注' || gate.docsReadyCount > 0) && (
+                            <span
+                              onClick={() => {
+                                setDetailInitialTab('prepStatus');
+                                setDetailProjectId(project.id);
+                              }}
+                              title="クリックして公的書類3点＋GbizID・KIZASHI申請状況を編集"
+                              style={{
+                                padding: '0.14rem 0.55rem',
+                                borderRadius: '0.3rem',
+                                backgroundColor: gate.docsReadyCount === 4 ? '#dcfce7' : '#ecfeff',
+                                color: gate.docsReadyCount === 4 ? '#166534' : '#0f766e',
+                                border: '1px solid #67e8f9',
+                                fontWeight: 800,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              📄 公的書類 {gate.docsReadyCount}/4
+                            </span>
+                          )}
+                        </>
+                      );
                     })()}
 
                     <span style={{ color: '#64748b', fontWeight: 600 }}>担当: {project.salesRep}</span>
@@ -3018,22 +3055,82 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                   <button
                     onClick={() => {
+                      setDetailInitialTab('deviceInfo');
+                      setDetailProjectId(project.id);
+                    }}
+                    title="PDF準拠：テマサック 7 STEP 仕様選択（本体・釣銭機・画面カラー・サイネージ・トリガー9種・PC）を開く"
+                    style={{
+                      padding: '0.38rem 0.62rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #fdba74',
+                      backgroundColor: '#fff7ed',
+                      color: '#c2410c',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🎨 7STEP仕様
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setDetailInitialTab('prepStatus');
+                      setDetailProjectId(project.id);
+                    }}
+                    title="PDF準拠：kz補助金・公的書類3点＋GbizID・2回お支払い管理を開く"
+                    style={{
+                      padding: '0.38rem 0.62rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #67e8f9',
+                      backgroundColor: '#ecfeff',
+                      color: '#0f766e',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💰 kz書類・支払
+                  </button>
+
+                  <button
+                    onClick={() => {
                       setDetailInitialTab('cashlessStatus');
                       setDetailProjectId(project.id);
                     }}
-                    title="キャッシュレス決済の選択（クレジット / JCB系クレジット / 電子マネー / QR決済）を開く"
+                    title="キャッシュレス決済の選択（クレジット / JCB系クレジット / 電子マネー / QR決済）＆ジャックス審査を開く"
                     style={{
-                      padding: '0.38rem 0.65rem',
+                      padding: '0.38rem 0.62rem',
                       borderRadius: '0.45rem',
                       border: '1px solid #a5b4fc',
                       backgroundColor: '#eef2ff',
                       color: '#3730a3',
-                      fontSize: '0.74rem',
+                      fontSize: '0.73rem',
                       fontWeight: 800,
                       cursor: 'pointer'
                     }}
                   >
                     💳 キャッシュレス選択
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setDetailInitialTab('installation');
+                      setDetailProjectId(project.id);
+                    }}
+                    title="PDF準拠：現地調査 5つの確認チェックリスト（設置場所・BM-POS・レセコンIP・回線書類）を開く"
+                    style={{
+                      padding: '0.38rem 0.62rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
+                      color: '#334155',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔌 現調5項目
                   </button>
 
                   <button

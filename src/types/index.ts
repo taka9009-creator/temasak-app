@@ -121,7 +121,9 @@ export function normalizeProgressStage(project: Project): SalesProgressStage {
   return '問合せ';
 }
 
-// 新しい導入導線マップ（PDF準拠）
+// 新しい導入導線マップ（医療機関様向け 導入・お手続きガイド PDF全10ページ完全準拠）
+export type IntroPhaseId = 'PHASE1' | 'PHASE2' | 'PHASE3' | 'PHASE4';
+
 export interface PipelineMap {
   // 基本情報拡張
   corpId?: string; // 法人番号
@@ -129,21 +131,59 @@ export interface PipelineMap {
   receiptComputer?: string; // レセコン
   integrationMethod?: string; // 連携方法
   department?: string; // 診療科目
+  entityType?: '医療法人（法人）' | '個人事業主'; // 法人 or 個人事業主（登記事項全部証明書の要否判定用）
 
-  // 機器・問合せ情報
+  // PDF Page 2: 4つの導入フェーズ (PHASE 1〜PHASE 4)
+  introPhase?: IntroPhaseId;
+
+  // PDF Page 3-5: 7 STEP 仕様選択
   deviceType?: string; // テマサックタイプ
-  bodyColor?: string; // カラー
-  changeMachineColor?: string; // 釣銭機カラー
+  bodyColor?: string; // STEP 1: 本体カラー（基本オールカラー3種 / 側面オプション6種）
+  changeMachineColor?: string; // STEP 2: 釣銭機カラー（ホワイト / ダークグレー）
+  screenColor?: string; // STEP 3: 画面カラー（全9色）
+  signageMode?: string; // STEP 4: サイネージ選択（方式A:スライド1枚 / 方式B:スライド5枚以内 / 方式C:動画YouTube）
+  signageYoutubeUrl?: string; // STEP 4: YouTube動画URL（方式Cの場合）
+  stampDataSource?: string; // STEP 4: 領収印・サイネージデータ準備（弊社簡易作製[事後修正不可] / 医院様データご支給）
+  triggerMethod?: string; // STEP 5: 精算開始トリガー選択（全9種）
+  bmposPcOption?: string; // STEP 7: BM-POS用PC選択（選択肢①：新規購入（推奨） / 選択肢②：所有（既存PCご用意））
+  bmposSpecCpuCheck?: boolean; // STEP 7: 所有PCスペック確認（Core i5 第11世代以上）
+  bmposSpecRamCheck?: boolean; // STEP 7: 所有PCスペック確認（メモリ 8GB以上）
+  bmposSpecDedicatedCheck?: boolean; // STEP 7: 所有PCスペック確認（BM-POS専用機・他ソフト相乗り不可）
+
   inquiryType?: string; // 問合種別
   purpose?: string; // 導入目的
 
-  // 補助金情報
-  subsidyName?: string; // 補助金
-  subsidyNextApp?: string; // 申込
-  referralDeadline?: string; // 稟議送客締日
-  applicationDeadline?: string; // 締切日
+  // PDF Page 6-7 & Page 10: デジタル化AI導入補助金 ＆ KIZASHI（kz）申請・公的書類3点＋GbizID・2回支払い管理
+  subsidyName?: string; // 補助金枠（インボイス枠[インボイス対応類型]★注目 / 通常枠 等）
+  subsidyNextApp?: string; // 申込回次（例：第7次申請締切 6/19 等）
+  referralDeadline?: string; // 申請前準備目安日（例：〜5/12）
+  applicationDeadline?: string; // 申請締切日（例：6/19）
+  grantDecisionDate?: string; // 交付決定予定日・決定日（例：7/29）
 
-  // 各種確認・準備状況
+  // 事前準備：3つの公的書類 ＋ 1アカウント (PDF Page 7)
+  docTaxCert?: boolean; // 【書類①】前年度の納税証明書
+  docTaxReturn?: boolean; // 【書類②】確定申告書（控え一式）
+  docRegistryCert?: boolean; // 【書類③】登記事項全部証明書（法人のみ・個人事業主は不要）
+  gbizIdPrimeStatus?: '未取得' | '申請中' | '取得済'; // 【アカウント①】GbizID（ジービズIDプライム）
+
+  // KIZASHI（kz）リード 3 STEP (PDF Page 7)
+  kzStep1ConsentSent?: boolean; // STEP 1: ②補助金同意書 署名捺印・スキャンメール送信（原本医院保管）
+  kzStep2Contacted?: boolean; // STEP 2: コンサルタント（KIZASHI）からの連絡・スケジュール確認済
+  kzStep3Applied?: boolean; // STEP 3: ⑤コンサルタントのリードによる補助金申請完了
+  kzGrantAdopted?: boolean; // 補助金 交付決定（採択決定）済
+
+  // 2回のお支払い管理 (PDF Page 2 & Page 10)
+  payment1KzFeeStatus?: '未請求' | '請求書発送済' | '支払完了'; // 1回目: ⑦KIZASHI報酬（交付決定時・本体設置前に支払必須）
+  payment2TemasakStatus?: '未請求' | '請求書発送済' | '支払完了'; // 2回目: ●テマサック代金＋2年分保守料（本体設置完了時）
+  orderSheetCreated?: boolean; // PHASE 3: ●テマサックご注文書作成
+
+  // スムーズな導入スタートに向けた最初の4つのアクション (PDF Page 10: ACT 1〜ACT 4)
+  act1DocsReady?: boolean; // ACT 1: GbizID・公的書類3点準備
+  act2ConsentSent?: boolean; // ACT 2: 同意書・希望シート署名捺印メール送信（原本保管）
+  act3SurveyReady?: boolean; // ACT 3: 現地調査日程調整・事前準備書類（レセコンIP・プロバイダ書類）用意
+  act4SpecsDecided?: boolean; // ACT 4: 7 STEP 仕様・データ（サイネージ・領収印）決定
+
+  // 各種確認・準備状況（旧互換含む）
   competitor?: string; // 競合
   triggerMethodCheck?: boolean; // トリガー方法確認
   hpsEstimateReply?: boolean; // HPS見積注文書返信
@@ -154,13 +194,204 @@ export interface PipelineMap {
   constructionCheck?: boolean; // 工事手配確認
   shippingCheck?: boolean; // 出荷手配確認
 
-  // 導入予定日・キャッシュレス決済選択（複数組み合わせ可）
+  // STEP 6 & PDF Page 8: キャッシュレス決済選択（複数組み合わせ可）＆ ジャックス審査4ステップ
   cashlessOptions?: string[]; // ['credit', 'jcb_credit', 'emoney', 'qr']
   creditStatus?: string; // ■ クレジット (VISA / Mastercard 等の主要カード決済)
   jcbCreditStatus?: string; // ■ JCB系クレジット (JCB / American Express / Diners 等)
   emoneyStatus?: string; // ■ 電子マネー (交通系IC・iD・QUICPay・楽天Edy 等)
   qrStatus?: string; // ■ QR決済 (PayPay・楽天ペイ・d払い・au PAY 等)
+  cashlessReviewStep?: '未着手' | 'STEP1_希望シート作成' | 'STEP2_署名メール送信' | 'STEP3_ジャックス連絡済' | 'STEP4_審査書類準備中' | 'クレジット審査通過（設置OK）' | '全決済審査完了';
+  creditApprovedForInstall?: boolean; // 【重要】本体設置の必須前提条件：クレジット審査通過済
+  qrEmoneyApproved?: boolean; // 電子マネー・QR決済審査完了（+1か月以上長期化注意）
+
+  // PDF Page 9: ④現地調査 5つの確認チェックリスト
+  surveyCheck1TemasakSpace?: boolean; // 確認1: 自動精算機テマサックの設置場所（スペース・電源・LAN）確認
+  surveyCheck2BmposSpace?: boolean; // 確認2: BM-POS用PCの設置場所（主に受付内・電源・LAN）確認
+  surveyCheck3RececomIp?: boolean; // 確認3: レセコンなどのIPアドレス確認【要事前準備】
+  surveyCheck4Network?: boolean; // 確認4: 院内（レセコン連携）・院外（インターネット通信）ネットワーク状況確認
+  surveyCheck5ProviderDoc?: boolean; // 確認5: プロバイダの申し込み内容が分かる書類の確認【要事前準備】
+  rececomIpMemo?: string; // 確認3: レセコンIPアドレス・設定情報メモ
+  providerDocMemo?: string; // 確認5: プロバイダ・回線種別メモ
+  powerLanConstructionNeeded?: '不要（既存設備でOK）' | '要増設工事（電源・LAN手配中）' | '増設工事完了'; // 電源・LAN増設工事の要否
 }
+
+// PDF Page 2: 導入4フェーズ定義
+export const INTRO_FOUR_PHASES: {
+  id: IntroPhaseId;
+  title: string;
+  subtitle: string;
+  badgeColor: string;
+  headerBg: string;
+  items: string[];
+}[] = [
+  {
+    id: 'PHASE1',
+    title: 'PHASE 1｜申請前準備',
+    subtitle: '①GbizID・②同意書・③CL希望シート・④現地調査',
+    badgeColor: '#1e3a8a',
+    headerBg: '#eff6ff',
+    items: [
+      '① GbizID取得（プライム）',
+      '② 補助金申請同意書ご記入（スキャン送信・原本保管）',
+      '③ キャッシュレス導入希望シート',
+      '④ 現地調査（弊社担当者訪問）'
+    ]
+  },
+  {
+    id: 'PHASE2',
+    title: 'PHASE 2｜申請〜交付決定前',
+    subtitle: '⑤補助金申請・⑥CL申込・●7STEP仕様・●見積書',
+    badgeColor: '#1d4ed8',
+    headerBg: '#dbeafe',
+    items: [
+      '⑤ 補助金申請（KIZASHIサポート付き）',
+      '⑥ キャッシュレス打合・申込（ジャックス連絡）',
+      '● テマサック仕様確認（7 STEP）',
+      '● お見積書作成（補助金申請用）'
+    ]
+  },
+  {
+    id: 'PHASE3',
+    title: 'PHASE 3｜補助金交付決定後',
+    subtitle: '⑦kz報酬支払（設置前必須）・●注文書・●設置日程調整',
+    badgeColor: '#c2410c',
+    headerBg: '#ffedd5',
+    items: [
+      '⑦ コンサルタント報酬お支払い（KIZASHI宛・設置前に支払）',
+      '● テマサックご注文書作成',
+      '● 搬入・設置日程の最終調整'
+    ]
+  },
+  {
+    id: 'PHASE4',
+    title: 'PHASE 4｜本番稼働・ご精算',
+    subtitle: '●本体設置（クレカ審査通過前提）・●本体＋2年保守精算',
+    badgeColor: '#047857',
+    headerBg: '#d1fae5',
+    items: [
+      '● 本体設置・操作説明（※クレジット審査通過が前提）',
+      '● テマサック代金お支払い（本体代金＋2年分の保守料）'
+    ]
+  }
+];
+
+// PDF Page 3: STEP 1 本体カラー選択（基本オールカラー3種 / 側面オプション6種）
+export const TEMASAK_BODY_COLORS = [
+  { id: 'オールホワイト', label: 'オールホワイト', category: '基本オールカラー', mainHex: '#f8fafc', sideHex: '#f8fafc' },
+  { id: 'オールブラック', label: 'オールブラック', category: '基本オールカラー', mainHex: '#1e293b', sideHex: '#1e293b' },
+  { id: 'オールシルバー', label: 'オールシルバー', category: '基本オールカラー', mainHex: '#cbd5e1', sideHex: '#cbd5e1' },
+  { id: 'ホワイト×シルバー', label: 'ホワイト×シルバー', category: '側面オプション', mainHex: '#f8fafc', sideHex: '#cbd5e1' },
+  { id: 'ホワイト×ブラック', label: 'ホワイト×ブラック', category: '側面オプション', mainHex: '#f8fafc', sideHex: '#1e293b' },
+  { id: 'ブラック×シルバー', label: 'ブラック×シルバー', category: '側面オプション', mainHex: '#1e293b', sideHex: '#cbd5e1' },
+  { id: 'ブラック×ホワイト', label: 'ブラック×ホワイト', category: '側面オプション', mainHex: '#1e293b', sideHex: '#f8fafc' },
+  { id: 'シルバー×ブラック', label: 'シルバー×ブラック', category: '側面オプション', mainHex: '#cbd5e1', sideHex: '#1e293b' },
+  { id: 'シルバー×ホワイト', label: 'シルバー×ホワイト', category: '側面オプション', mainHex: '#cbd5e1', sideHex: '#f8fafc' }
+] as const;
+
+// PDF Page 3: STEP 2 釣銭機カラー選択（2色）
+export const TEMASAK_CHANGE_MACHINE_COLORS = [
+  { id: 'ホワイト', label: 'ホワイト', subtitle: '明るく清潔感のある標準カラー', hex: '#f8fafc' },
+  { id: 'ダークグレー', label: 'ダークグレー', subtitle: 'シックで落ち着いた高コントラスト色', hex: '#334155' }
+] as const;
+
+// PDF Page 4: STEP 3 画面カラー選択（全9色）
+export const TEMASAK_SCREEN_COLORS = [
+  { id: 'テマサックオレンジ', label: 'テマサックオレンジ', hex: '#ea580c' },
+  { id: 'ピンク', label: 'ピンク', hex: '#ec4899' },
+  { id: 'ブルー', label: 'ブルー', hex: '#2563eb' },
+  { id: 'ブラウン', label: 'ブラウン', hex: '#78350f' },
+  { id: 'グリーン', label: 'グリーン', hex: '#16a34a' },
+  { id: 'ライトブルー', label: 'ライトブルー', hex: '#38bdf8' },
+  { id: 'グレー', label: 'グレー', hex: '#64748b' },
+  { id: 'サクラ', label: 'サクラ', hex: '#f472b6' },
+  { id: 'ライトパープル', label: 'ライトパープル', hex: '#a855f7' }
+] as const;
+
+// PDF Page 4: STEP 4 サイネージ選択（3方式）
+export const TEMASAK_SIGNAGE_MODES = [
+  {
+    id: '方式A：スライド（1枚）',
+    label: '方式A：スライド（1枚）',
+    subtitle: '静止画1枚を常時表示するシンプルな案内方式です。休診日案内や基本案内に適しています。'
+  },
+  {
+    id: '方式B：スライド（5枚以内）',
+    label: '方式B：スライド（5枚以内）',
+    subtitle: '最大5枚までの静止画スライドを順番に切り替えて表示します。複数の院内告知に最適です。'
+  },
+  {
+    id: '方式C：動画（YouTubeのURL）',
+    label: '方式C：動画（YouTubeのURL）',
+    subtitle: 'YouTubeにアップロードされた動画URLを指定して再生します。視覚的なPRに活用できます。'
+  }
+] as const;
+
+// PDF Page 4: STEP 5 精算開始トリガー選択（3系統・全9種）
+export const TEMASAK_TRIGGER_METHODS = [
+  { id: '① テプラ診察券', group: '■ 診察券・アプリ系', label: '① テプラ診察券' },
+  { id: '② リライトカード', group: '■ 診察券・アプリ系', label: '② リライトカード' },
+  { id: '③ 診察券アプリ', group: '■ 診察券・アプリ系', label: '③ 診察券アプリ' },
+  { id: '④ 明細書QR', group: '■ 明細書・領収書 印字系', label: '④ 明細書QR' },
+  { id: '⑤ 明細書バーコード', group: '■ 明細書・領収書 印字系', label: '⑤ 明細書バーコード' },
+  { id: '⑥ 領収書QR', group: '■ 明細書・領収書 印字系', label: '⑥ 領収書QR' },
+  { id: '⑦ 領収書バーコード', group: '■ 明細書・領収書 印字系', label: '⑦ 領収書バーコード' },
+  { id: '⑧ バーコードプリント', group: '■ 単票プリント出力系', label: '⑧ バーコードプリント' },
+  { id: '⑨ QRプリント', group: '■ 単票プリント出力系', label: '⑨ QRプリント' }
+] as const;
+
+// PDF Page 5: STEP 7 BM-POS用PC選択（2択）
+export const TEMASAK_BMPOS_PC_OPTIONS = [
+  {
+    id: '選択肢①：新規購入（推奨）',
+    label: '選択肢①：新規購入（推奨）',
+    subtitle: '動作検証済みのBM-POS専用PCをテマサックと合わせて新規手配します。'
+  },
+  {
+    id: '選択肢②：所有（既存PCご用意）',
+    label: '選択肢②：所有（既存PCご用意）',
+    subtitle: '医院様でお持ちのPCを使用します（Core i5第11世代以上・メモリ8GB以上・BM-POS専用機に限ります）。'
+  }
+] as const;
+
+// PDF Page 6: デジタル化AI導入補助金 枠・類型
+export const SUBSIDY_FRAME_OPTIONS = [
+  {
+    id: 'インボイス枠（インボイス対応類型）★注目',
+    label: 'インボイス枠（インボイス対応類型）★注目',
+    rate: 'ソフト50万以下 3/4（小規模 4/5）・50万超 2/3 ／ PC〜10万(1/2) ／ 精算機〜20万(1/2)',
+    target: '会計・受発注・決済ソフト、クラウド利用料(最大2年分)、導入関連費、ハード購入費'
+  },
+  {
+    id: '通常枠',
+    label: '通常枠',
+    rate: '5万〜450万円以下【補助率 1/2】',
+    target: 'ソフト購入費、クラウド利用料（最大2年分）、導入関連費'
+  },
+  {
+    id: 'インボイス枠（電子取引類型）',
+    label: 'インボイス枠（電子取引類型）',
+    rate: '〜350万円【補助率 中小2/3・大企業1/2】',
+    target: 'クラウド利用料（最大2年分）'
+  },
+  {
+    id: '複数社連携IT導入枠',
+    label: '複数社連携IT導入枠',
+    rate: '最大3,000万円・事務費専門家費上限200万円(2/3)',
+    target: 'インボイス対応類型経費＋消費動向分析費・事務費'
+  },
+  {
+    id: 'セキュリティ対策推進枠',
+    label: 'セキュリティ対策推進枠',
+    rate: '5万〜100万円【補助率 1/2】',
+    target: 'セキュリティサービス利用料（最大2年分）'
+  },
+  {
+    id: '補助金なし（通常導入）',
+    label: '補助金なし（通常導入）',
+    rate: '自己資金・リース等での導入',
+    target: '本体一式＋保守'
+  }
+] as const;
 
 export const CASHLESS_PAYMENT_CATEGORIES = [
   {
@@ -192,6 +423,326 @@ export const CASHLESS_PAYMENT_CATEGORIES = [
     statusKey: 'qrStatus' as const
   }
 ] as const;
+
+/**
+ * 案件の「7 STEP 仕様決定率」「公的書類3点＋GbizID準備率」「現地調査5項目確認率」「導入フェーズ」「3大ストッパー」を集計するヘルパー
+ */
+export function getProjectSpecAndGateSummary(project: Project) {
+  const pm = project.pipelineMap || {};
+  const selectedCashless = Array.isArray(pm.cashlessOptions)
+    ? pm.cashlessOptions
+    : [
+        pm.creditStatus ? 'credit' : null,
+        pm.jcbCreditStatus ? 'jcb_credit' : null,
+        pm.emoneyStatus ? 'emoney' : null,
+        pm.qrStatus ? 'qr' : null
+      ].filter(Boolean) as string[];
+
+  // 7 STEP 完了判定
+  const step1Done = !!pm.bodyColor;
+  const step2Done = !!pm.changeMachineColor;
+  const step3Done = !!pm.screenColor;
+  const step4Done = !!pm.signageMode;
+  const step5Done = !!pm.triggerMethod;
+  const step6Done = selectedCashless.length > 0;
+  const step7Done = !!pm.bmposPcOption;
+  const specCompletedCount = [
+    step1Done,
+    step2Done,
+    step3Done,
+    step4Done,
+    step5Done,
+    step6Done,
+    step7Done
+  ].filter(Boolean).length;
+
+  // 公的書類3点 ＋ GbizIDプライム (個人事業主の場合は登記事項全部証明書は不要＝自動クリア扱い)
+  const isIndividual = pm.entityType === '個人事業主';
+  const doc1Done = !!pm.docTaxCert;
+  const doc2Done = !!pm.docTaxReturn;
+  const doc3Done = isIndividual ? true : !!pm.docRegistryCert;
+  const gbizDone = pm.gbizIdPrimeStatus === '取得済';
+  const docsReadyCount = [doc1Done, doc2Done, doc3Done, gbizDone].filter(Boolean).length;
+
+  // 現地調査 5項目
+  const surveyReadyCount = [
+    !!pm.surveyCheck1TemasakSpace,
+    !!pm.surveyCheck2BmposSpace,
+    !!pm.surveyCheck3RececomIp,
+    !!pm.surveyCheck4Network,
+    !!pm.surveyCheck5ProviderDoc
+  ].filter(Boolean).length;
+
+  // 導入4フェーズ判定
+  let introPhase: IntroPhaseId = pm.introPhase || 'PHASE1';
+  if (!pm.introPhase) {
+    if (pm.payment2TemasakStatus === '支払完了' || project.installationDate) {
+      introPhase = 'PHASE4';
+    } else if (pm.kzGrantAdopted || normalizeProgressStage(project) === '受注') {
+      introPhase = 'PHASE3';
+    } else if (pm.kzStep1ConsentSent || specCompletedCount >= 4) {
+      introPhase = 'PHASE2';
+    } else {
+      introPhase = 'PHASE1';
+    }
+  }
+
+  const hasQrOrEmoney = selectedCashless.includes('qr') || selectedCashless.includes('emoney');
+  const creditApproved = !!pm.creditApprovedForInstall || pm.cashlessReviewStep === 'クレジット審査通過（設置OK）' || pm.cashlessReviewStep === '全決済審査完了';
+  const kzFeePaid = pm.payment1KzFeeStatus === '支払完了';
+
+  return {
+    specCompletedCount,
+    docsReadyCount,
+    surveyReadyCount,
+    introPhase,
+    selectedCashless,
+    hasQrOrEmoney,
+    creditApproved,
+    kzFeePaid
+  };
+}
+
+/**
+ * pipelineMap や surveyDate / installationDate などの更新時に、
+ * ACT1〜4・導入4フェーズ(PHASE1〜4)・営業8段階ステータス(kz送客/受注)・活動履歴を双方向で自動連動させるヘルパー
+ */
+export function autoSyncProjectUpdates(project: Project, updates: Partial<Project>): Project {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const prevPm = project.pipelineMap || {};
+  const incomingPm = updates.pipelineMap ? { ...prevPm, ...updates.pipelineMap } : { ...prevPm };
+
+  // 1. キャッシュレス選択配列と各ステータス文字列の相互同期
+  let cashlessOptions = Array.isArray(incomingPm.cashlessOptions)
+    ? [...incomingPm.cashlessOptions]
+    : [
+        incomingPm.creditStatus ? 'credit' : null,
+        incomingPm.jcbCreditStatus ? 'jcb_credit' : null,
+        incomingPm.emoneyStatus ? 'emoney' : null,
+        incomingPm.qrStatus ? 'qr' : null
+      ].filter(Boolean) as string[];
+
+  if (updates.pipelineMap) {
+    // もし個別ステータスが入力されていて cashlessOptions が明示指定されていなければ自動追加
+    if (!('cashlessOptions' in updates.pipelineMap)) {
+      if (incomingPm.creditStatus && incomingPm.creditStatus !== '不要' && !cashlessOptions.includes('credit')) {
+        cashlessOptions.push('credit');
+      }
+      if (incomingPm.jcbCreditStatus && incomingPm.jcbCreditStatus !== '不要' && !cashlessOptions.includes('jcb_credit')) {
+        cashlessOptions.push('jcb_credit');
+      }
+      if (incomingPm.emoneyStatus && incomingPm.emoneyStatus !== '不要' && !cashlessOptions.includes('emoney')) {
+        cashlessOptions.push('emoney');
+      }
+      if (incomingPm.qrStatus && incomingPm.qrStatus !== '不要' && !cashlessOptions.includes('qr')) {
+        cashlessOptions.push('qr');
+      }
+    }
+  }
+  incomingPm.cashlessOptions = cashlessOptions;
+
+  // 2. 7 STEP・書類3点＋GbizID・現地調査5項目の達成度から ACT 1〜ACT 4 を自動連動
+  const isIndividual = incomingPm.entityType === '個人事業主';
+  const allDocsDone =
+    !!incomingPm.docTaxCert &&
+    !!incomingPm.docTaxReturn &&
+    (isIndividual ? true : !!incomingPm.docRegistryCert) &&
+    incomingPm.gbizIdPrimeStatus === '取得済';
+
+  const all7StepsDone =
+    !!incomingPm.bodyColor &&
+    !!incomingPm.changeMachineColor &&
+    !!incomingPm.screenColor &&
+    !!incomingPm.signageMode &&
+    !!incomingPm.triggerMethod &&
+    cashlessOptions.length > 0 &&
+    !!incomingPm.bmposPcOption;
+
+  const nextSurveyDate = updates.surveyDate !== undefined ? updates.surveyDate : project.surveyDate;
+  const nextInstallDate = updates.installationDate !== undefined ? updates.installationDate : project.installationDate;
+
+  const surveyPrepDone =
+    (!!incomingPm.surveyCheck3RececomIp && !!incomingPm.surveyCheck5ProviderDoc) ||
+    [
+      incomingPm.surveyCheck1TemasakSpace,
+      incomingPm.surveyCheck2BmposSpace,
+      incomingPm.surveyCheck3RececomIp,
+      incomingPm.surveyCheck4Network,
+      incomingPm.surveyCheck5ProviderDoc
+    ].filter(Boolean).length >= 3;
+
+  if (updates.pipelineMap && !('act1DocsReady' in updates.pipelineMap) && allDocsDone) {
+    incomingPm.act1DocsReady = true;
+  }
+  if (
+    updates.pipelineMap &&
+    !('act2ConsentSent' in updates.pipelineMap) &&
+    incomingPm.kzStep1ConsentSent &&
+    cashlessOptions.length > 0
+  ) {
+    incomingPm.act2ConsentSent = true;
+  }
+  if (updates.pipelineMap && !('act3SurveyReady' in updates.pipelineMap) && surveyPrepDone) {
+    incomingPm.act3SurveyReady = true;
+  }
+  if (updates.pipelineMap && !('act4SpecsDecided' in updates.pipelineMap) && all7StepsDone) {
+    incomingPm.act4SpecsDecided = true;
+  }
+
+  // 3. KIZASHIステップ・交付決定・2回支払い・導入4フェーズ ⇔ 営業8段階ステータス（kz送客 / 受注）＆活動履歴の双方向連動
+  let nextStatus: ProjectStatus = updates.status !== undefined ? updates.status : project.status;
+  let nextKzReferralDate = updates.kzReferralDate !== undefined ? updates.kzReferralDate : project.kzReferralDate;
+  let nextOrderDate = updates.orderDate !== undefined ? updates.orderDate : project.orderDate;
+  let nextMemo = updates.memo !== undefined ? updates.memo : project.memo || '';
+  let nextActivities = updates.activities !== undefined ? [...updates.activities] : [...(project.activities || [])];
+  let nextProb = updates.probability !== undefined ? updates.probability : project.probability;
+
+  const explicitIntroPhaseChange = updates.pipelineMap && 'introPhase' in updates.pipelineMap;
+  const explicitKzAdoptedChange = updates.pipelineMap && 'kzGrantAdopted' in updates.pipelineMap;
+  const explicitPayment2Change = updates.pipelineMap && 'payment2TemasakStatus' in updates.pipelineMap;
+  const explicitKzStepChange =
+    updates.pipelineMap &&
+    ('kzStep1ConsentSent' in updates.pipelineMap ||
+      'kzStep2Contacted' in updates.pipelineMap ||
+      'kzStep3Applied' in updates.pipelineMap);
+
+  if (explicitKzAdoptedChange) {
+    if (incomingPm.kzGrantAdopted) {
+      // 交付決定（採択）ON ➔ 営業ステータス「受注」＆ 導入フェーズ「PHASE 3」へ自動連動
+      nextStatus = '受注';
+      incomingPm.introPhase = 'PHASE3';
+      nextOrderDate = nextOrderDate || todayStr;
+      nextProb = 'A';
+      if (!nextMemo.includes('受注済')) {
+        nextMemo = `${nextMemo} | 受注済(${nextOrderDate})`.trim();
+      }
+      nextActivities = [
+        {
+          id: `act-sync-${Date.now()}`,
+          projectId: project.id,
+          date: todayStr,
+          type: '🎉 補助金交付決定（採択）➔【受注】',
+          content: '補助金の交付決定（採択）に伴い、進捗フロー・カンバンを「受注（PHASE 3｜補助金交付決定後）」へ自動連動しました。',
+          points: project.orderDate ? 0 : 10
+        },
+        ...nextActivities
+      ];
+    } else if (nextStatus === '受注') {
+      // 交付決定をOFFに戻した場合 ➔ 「kz送客（PHASE 2）」へ戻す
+      nextStatus = 'kz送客';
+      incomingPm.introPhase = 'PHASE2';
+      nextOrderDate = undefined;
+      nextMemo = nextMemo.replace(/\s*\|\s*受注済\([^)]*\)/g, '').trim();
+      nextActivities = [
+        {
+          id: `act-sync-${Date.now()}`,
+          projectId: project.id,
+          date: todayStr,
+          type: '🔄 進捗移動: 【受注】➔【kz送客】',
+          content: '交付決定チェックの解除に伴い、進捗フロー・カンバンを「kz送客（PHASE 2）」へ連動しました。',
+          points: 0
+        },
+        ...nextActivities
+      ];
+    }
+  } else if (explicitIntroPhaseChange && incomingPm.introPhase) {
+    const targetPh = incomingPm.introPhase;
+    if (targetPh === 'PHASE3' || targetPh === 'PHASE4') {
+      incomingPm.kzGrantAdopted = true;
+      if (nextStatus !== '受注') {
+        const prevSt = normalizeProgressStage(project);
+        nextStatus = '受注';
+        nextOrderDate = nextOrderDate || todayStr;
+        nextProb = 'A';
+        if (!nextMemo.includes('受注済')) {
+          nextMemo = `${nextMemo} | 受注済(${nextOrderDate})`.trim();
+        }
+        nextActivities = [
+          {
+            id: `act-sync-${Date.now()}`,
+            projectId: project.id,
+            date: todayStr,
+            type: `🔄 進捗移動: 【${prevSt}】➔【受注】`,
+            content: `導入フェーズを「${targetPh}」へ変更したため、営業進捗・カンバンも「受注」へ連動しました。`,
+            points: 0
+          },
+          ...nextActivities
+        ];
+      }
+    } else if (targetPh === 'PHASE1' || targetPh === 'PHASE2') {
+      if (nextStatus === '受注') {
+        incomingPm.kzGrantAdopted = false;
+        nextStatus = 'kz送客';
+        nextOrderDate = undefined;
+        nextMemo = nextMemo.replace(/\s*\|\s*受注済\([^)]*\)/g, '').trim();
+        nextKzReferralDate = nextKzReferralDate || todayStr;
+        nextActivities = [
+          {
+            id: `act-sync-${Date.now()}`,
+            projectId: project.id,
+            date: todayStr,
+            type: '🔄 進捗移動: 【受注】➔【kz送客】',
+            content: `導入フェーズを「${targetPh}」へ戻したため、営業進捗・カンバンも「kz送客」へ連動しました。`,
+            points: 0
+          },
+          ...nextActivities
+        ];
+      }
+    }
+  } else if (explicitKzStepChange) {
+    if (incomingPm.kzStep3Applied) {
+      incomingPm.introPhase = incomingPm.kzGrantAdopted ? 'PHASE3' : 'PHASE2';
+    }
+    const curIdx = SALES_PROGRESS_FLOW.indexOf(normalizeProgressStage(project));
+    if (
+      (incomingPm.kzStep1ConsentSent || incomingPm.kzStep2Contacted || incomingPm.kzStep3Applied) &&
+      curIdx >= 0 &&
+      curIdx < 6 &&
+      nextStatus !== '受注'
+    ) {
+      const prevSt = normalizeProgressStage(project);
+      nextStatus = 'kz送客';
+      nextKzReferralDate = nextKzReferralDate || todayStr;
+      nextProb = 'A';
+      if (!nextMemo.includes('kz送客済')) {
+        nextMemo = `${nextMemo} | kz送客済(${nextKzReferralDate})`.trim();
+      }
+      nextActivities = [
+        {
+          id: `act-sync-${Date.now()}`,
+          projectId: project.id,
+          date: todayStr,
+          type: `🔄 進捗移動: 【${prevSt}】➔【kz送客】`,
+          content: 'KIZASHI（補助金コンサルタント）申請ステップの進行に伴い、進捗フロー・カンバンを「kz送客」へ自動連動しました。',
+          points: 0
+        },
+        ...nextActivities
+      ];
+    }
+  }
+
+  if (explicitPayment2Change && incomingPm.payment2TemasakStatus === '支払完了') {
+    incomingPm.introPhase = 'PHASE4';
+  }
+
+  const nextTotalPts = nextActivities.reduce((sum, act) => sum + inferActivityPoints(act), 0);
+
+  return {
+    ...project,
+    ...updates,
+    status: nextStatus,
+    probability: nextProb,
+    surveyDate: nextSurveyDate,
+    installationDate: nextInstallDate,
+    kzReferralDate: nextKzReferralDate,
+    orderDate: nextOrderDate,
+    memo: nextMemo,
+    pipelineMap: incomingPm,
+    activities: nextActivities,
+    clinicPoints: updates.clinicPoints !== undefined ? updates.clinicPoints : nextTotalPts,
+    updatedAt: new Date().toISOString()
+  };
+}
 
 export interface Activity {
   id: string;

@@ -2,13 +2,22 @@ import React, { useState, useEffect } from 'react';
 import {
   SALES_PROGRESS_FLOW,
   CASHLESS_PAYMENT_CATEGORIES,
+  INTRO_FOUR_PHASES,
+  TEMASAK_BODY_COLORS,
+  TEMASAK_CHANGE_MACHINE_COLORS,
+  TEMASAK_SCREEN_COLORS,
+  TEMASAK_SIGNAGE_MODES,
+  TEMASAK_TRIGGER_METHODS,
+  TEMASAK_BMPOS_PC_OPTIONS,
+  SUBSIDY_FRAME_OPTIONS,
+  getProjectSpecAndGateSummary,
   getClinicTotalPoints,
   inferActivityPoints,
   isBtoBDealerProject,
   normalizeProgressStage,
   syncProjectWithActivities
 } from '../types';
-import type { Project, NextAction, SalesProgressStage, Activity } from '../types';
+import type { Project, NextAction, SalesProgressStage, Activity, PipelineMap, IntroPhaseId } from '../types';
 import { differenceInDays, format } from 'date-fns';
 import { X, CheckCircle2, AlertTriangle, Sparkles, Save, Loader2, Zap, ExternalLink, Search, Calendar, Clock, Trophy, Edit2, Trash2, Plus, Bot, RotateCcw } from 'lucide-react';
 import { useMasterData } from '../context/MasterDataContext';
@@ -227,9 +236,36 @@ export default function ProjectDetailsPanel({
     setIsAddingActivity(false);
   }, [project?.id]);
 
+  // 外部（進捗フロー変更・他タブ操作・カンバン移動）で確度やキャッシュレス状態が更新された際も即時同期
+  useEffect(() => {
+    if (!project) return;
+    setProbability(project.probability || '未設定');
+    const pm = project.pipelineMap || {};
+    const inferredOpts = Array.isArray(pm.cashlessOptions)
+      ? pm.cashlessOptions
+      : [
+          pm.creditStatus ? 'credit' : null,
+          pm.jcbCreditStatus ? 'jcb_credit' : null,
+          pm.emoneyStatus ? 'emoney' : null,
+          pm.qrStatus ? 'qr' : null
+        ].filter(Boolean) as string[];
+    setCashlessOptions(inferredOpts);
+    setCreditStatus(pm.creditStatus || '');
+    setJcbCreditStatus(pm.jcbCreditStatus || '');
+    setEmoneyStatus(pm.emoneyStatus || '');
+    setQrStatus(pm.qrStatus || '');
+  }, [
+    project?.probability,
+    project?.pipelineMap?.creditStatus,
+    project?.pipelineMap?.jcbCreditStatus,
+    project?.pipelineMap?.emoneyStatus,
+    project?.pipelineMap?.qrStatus,
+    project?.pipelineMap?.cashlessOptions
+  ]);
+
   if (!project) return null;
 
-  // カレンダーセルのクリックで 診療(●) ⇔ 休診(休) ⇔ 短縮(▲) を切り替え
+  // カレンダーセルのクリックで 診療(●) ⇔ 休診(休) ⇔ 短縮(▲) を切り替え（即時自動保存）
   const handleToggleSlot = (day: DayKey, period: 'am' | 'pm') => {
     setWeeklyMatrix(prev => {
       const current = prev[day][period];
@@ -244,11 +280,12 @@ export default function ProjectDetailsPanel({
       };
       const nextClosedStr = buildClosedDaysString(updated);
       setClosedDays(nextClosedStr);
+      saveBasicInfoToProject({ closedDays: nextClosedStr });
       return updated;
     });
   };
 
-  // 曜日ヘッダークリックでその曜日丸ごと 診療(●) ⇔ 休診(休) を切り替え
+  // 曜日ヘッダークリックでその曜日丸ごと 診療(●) ⇔ 休診(休) を切り替え（即時自動保存）
   const handleToggleWholeDay = (day: DayKey) => {
     setWeeklyMatrix(prev => {
       const isCurrentlyClosed = prev[day].am === 'closed' && prev[day].pm === 'closed';
@@ -261,6 +298,7 @@ export default function ProjectDetailsPanel({
       };
       const nextClosedStr = buildClosedDaysString(updated);
       setClosedDays(nextClosedStr);
+      saveBasicInfoToProject({ closedDays: nextClosedStr });
       return updated;
     });
   };
@@ -760,10 +798,141 @@ ${(project.activities || []).map(a => {
             </div>
           </div>
 
-          <div style={{ marginTop: '1.5rem' }}>
-            <strong style={{ fontSize: '0.875rem' }}>進捗フロー（クリックで切り替え可能・アクションボタン連動）</strong>
+          <div style={{ marginTop: '1.25rem' }}>
+            <strong style={{ fontSize: '0.875rem' }}>① 営業進捗フロー（クリックで切り替え可能・カンバン＆活動履歴と自動連動）</strong>
             {renderPipeline(pipelinePhases, normalizedCurrentStage)}
           </div>
+
+          {/* PDF Page 2: 導入4フェーズ ＆ 7 STEP仕様・公的書類・審査・現地調査 サマリーダッシュボード */}
+          {(() => {
+            const gate = getProjectSpecAndGateSummary(project);
+            const pm = project.pipelineMap || {};
+            return (
+              <div style={{
+                marginTop: '1rem',
+                padding: '0.85rem 1rem',
+                backgroundColor: '#f8fafc',
+                borderRadius: '0.75rem',
+                border: '1px solid #cbd5e1',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.65rem'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <strong style={{ fontSize: '0.82rem', color: '#0f172a' }}>
+                    ② 導入お手続き4フェーズ（PDF P.2準拠：申請前準備〜本番稼働まで約4か月）
+                  </strong>
+                  <span style={{ fontSize: '0.72rem', color: '#475569' }}>
+                    クリックで現在の導入フェーズを切替
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.45rem' }}>
+                  {INTRO_FOUR_PHASES.map(ph => {
+                    const isCur = gate.introPhase === ph.id;
+                    return (
+                      <button
+                        key={ph.id}
+                        type="button"
+                        onClick={() => {
+                          onUpdateProject?.(project.id, {
+                            pipelineMap: {
+                              ...pm,
+                              introPhase: ph.id as IntroPhaseId
+                            }
+                          });
+                        }}
+                        style={{
+                          textAlign: 'left',
+                          padding: '0.5rem 0.65rem',
+                          borderRadius: '0.5rem',
+                          border: isCur ? `2px solid ${ph.badgeColor}` : '1px solid #cbd5e1',
+                          backgroundColor: isCur ? ph.headerBg : '#ffffff',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ fontSize: '0.76rem', fontWeight: 900, color: isCur ? ph.badgeColor : '#334155', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{ph.title}</span>
+                          {isCur && <span>● 現在</span>}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: '#475569', marginTop: '0.15rem' }}>
+                          {ph.subtitle}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 4大チェック進捗ピル（クリックで該当タブへジャンプ） */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', paddingTop: '0.35rem', borderTop: '1px dashed #cbd5e1' }}>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('deviceInfo')}
+                    style={{
+                      padding: '0.28rem 0.65rem',
+                      borderRadius: '999px',
+                      border: '1px solid #93c5fd',
+                      backgroundColor: gate.specCompletedCount === 7 ? '#dcfce7' : '#eff6ff',
+                      color: gate.specCompletedCount === 7 ? '#166534' : '#1e40af',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🎨 7 STEP 仕様決定: {gate.specCompletedCount}/7 STEP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('prepStatus')}
+                    style={{
+                      padding: '0.28rem 0.65rem',
+                      borderRadius: '999px',
+                      border: '1px solid #67e8f9',
+                      backgroundColor: gate.docsReadyCount === 4 ? '#dcfce7' : '#ecfeff',
+                      color: gate.docsReadyCount === 4 ? '#166534' : '#0f766e',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    📄 公的書類3点＋GbizID: {gate.docsReadyCount}/4 完了
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('cashlessStatus')}
+                    style={{
+                      padding: '0.28rem 0.65rem',
+                      borderRadius: '999px',
+                      border: gate.creditApproved ? '1px solid #86efac' : '1px solid #fcd34d',
+                      backgroundColor: gate.creditApproved ? '#dcfce7' : '#fef3c7',
+                      color: gate.creditApproved ? '#166534' : '#b45309',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    💳 クレカ審査(設置前提): {gate.creditApproved ? '✓ 通過済(設置OK)' : '審査・手続中'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('installation')}
+                    style={{
+                      padding: '0.28rem 0.65rem',
+                      borderRadius: '999px',
+                      border: '1px solid #c7d2fe',
+                      backgroundColor: gate.surveyReadyCount === 5 ? '#dcfce7' : '#eef2ff',
+                      color: gate.surveyReadyCount === 5 ? '#166534' : '#3730a3',
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    🔌 現地調査5項目: {gate.surveyReadyCount}/5 確認済
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         {/* 中段：次に何をする？ */}
@@ -798,15 +967,16 @@ ${(project.activities || []).map(a => {
           )}
         </div>
 
-        {/* 下段：タブエリア */}
+        {/* 下段：タブエリア（PDFガイド全10ページ完全準拠） */}
         <div>
-          <div className="tabs-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', paddingBottom: '0.5rem' }}>
-            <button className={`tab-button ${activeTab === 'basicInfo' ? 'active' : ''}`} onClick={() => setActiveTab('basicInfo')}>基本情報</button>
-            <button className={`tab-button ${activeTab === 'pipelineMap' ? 'active' : ''}`} onClick={() => setActiveTab('pipelineMap')}>進捗ロードマップ</button>
-            <button className={`tab-button ${activeTab === 'activities' ? 'active' : ''}`} onClick={() => setActiveTab('activities')}>活動履歴</button>
-            <button className={`tab-button ${activeTab === 'deviceInfo' ? 'active' : ''}`} onClick={() => setActiveTab('deviceInfo')}>機器・補助金情報</button>
-            <button className={`tab-button ${activeTab === 'prepStatus' ? 'active' : ''}`} onClick={() => setActiveTab('prepStatus')}>各種確認・準備状況</button>
-            <button className={`tab-button ${activeTab === 'cashlessStatus' ? 'active' : ''}`} onClick={() => setActiveTab('cashlessStatus')}>キャッシュレス導入状況</button>
+          <div className="tabs-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', paddingBottom: '0.6rem' }}>
+            <button className={`tab-button ${activeTab === 'basicInfo' ? 'active' : ''}`} onClick={() => setActiveTab('basicInfo')}>📋 基本情報</button>
+            <button className={`tab-button ${activeTab === 'deviceInfo' ? 'active' : ''}`} onClick={() => setActiveTab('deviceInfo')}>🎨 7 STEP 仕様選択</button>
+            <button className={`tab-button ${activeTab === 'prepStatus' ? 'active' : ''}`} onClick={() => setActiveTab('prepStatus')}>💰 kz補助金・書類3点・2回支払</button>
+            <button className={`tab-button ${activeTab === 'cashlessStatus' ? 'active' : ''}`} onClick={() => setActiveTab('cashlessStatus')}>💳 キャッシュレス・ジャックス審査</button>
+            <button className={`tab-button ${activeTab === 'installation' ? 'active' : ''}`} onClick={() => setActiveTab('installation')}>🔌 現地調査 確認1〜5</button>
+            <button className={`tab-button ${activeTab === 'activities' ? 'active' : ''}`} onClick={() => setActiveTab('activities')}>🕒 活動履歴 ({(project.activities || []).length})</button>
+            <button className={`tab-button ${activeTab === 'pipelineMap' ? 'active' : ''}`} onClick={() => setActiveTab('pipelineMap')}>🗺️ 導入導線マップ</button>
           </div>
 
           {activeTab === 'basicInfo' && (
@@ -826,20 +996,27 @@ ${(project.activities || []).map(a => {
                 </button>
               </div>
 
-              {/* 確度の編集エリア */}
-              <div className="card" style={{ padding: '0.85rem 1rem', marginBottom: '1rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              {/* 確度の編集エリア（変更時に即時保存＆カンバン連動） */}
+              <div className="card" style={{ padding: '0.85rem 1rem', marginBottom: '1rem', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                 <label style={{ fontWeight: 700, fontSize: '0.875rem' }}>確度:</label>
                 <select
                   className="mock-input"
                   style={{ width: '200px', margin: 0 }}
                   value={probability}
-                  onChange={e => setProbability(e.target.value)}
+                  onChange={e => {
+                    const nextProb = e.target.value;
+                    setProbability(nextProb);
+                    saveBasicInfoToProject({ probability: nextProb });
+                  }}
                 >
                   <option value="未設定">未設定</option>
                   <option value="A">A (高い)</option>
                   <option value="B">B (普通)</option>
                   <option value="C">C (低い)</option>
                 </select>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  ※変更すると即座に案件カンバン・リストに反映されます
+                </span>
               </div>
 
               {/* ホームページURL（AI自動解析＆自動保存） */}
@@ -1209,6 +1386,7 @@ ${(project.activities || []).map(a => {
                       style={{ marginTop: 0, backgroundColor: '#ffffff', fontWeight: 600 }}
                       value={clinicHours}
                       onChange={e => setClinicHours(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ clinicHours: e.target.value })}
                     />
                   </div>
                   <div>
@@ -1225,37 +1403,75 @@ ${(project.activities || []).map(a => {
                         const parsed = parseScheduleFromStrings(clinicHours, e.target.value);
                         setWeeklyMatrix(parsed.matrix);
                       }}
+                      onBlur={e => saveBasicInfoToProject({ closedDays: e.target.value })}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* 基本情報フィールド（住所・電話番号・院長・診療科目・予約システム） */}
-              <div className="card" style={{ padding: '1rem' }}>
+              {/* 基本情報フィールド（住所・電話番号・院長・診療科目・予約システム：入力確定時に自動保存） */}
+              <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
                 <div className="two-col-grid" style={{ fontSize: '0.875rem', gap: '0.75rem' }}>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <strong>📍 住所:</strong>
-                    <input type="text" className="mock-input" value={address} onChange={e => setAddress(e.target.value)} />
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={address}
+                      onChange={e => setAddress(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ address: e.target.value })}
+                    />
                   </div>
                   <div>
                     <strong>📞 電話番号:</strong>
-                    <input type="text" className="mock-input" value={phone} onChange={e => setPhone(e.target.value)} placeholder="例: 011-XXX-XXXX" />
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ phone: e.target.value })}
+                      placeholder="例: 011-XXX-XXXX"
+                    />
                   </div>
                   <div>
                     <strong>👨‍⚕️ 院長:</strong>
-                    <input type="text" className="mock-input" value={director} onChange={e => setDirector(e.target.value)} placeholder="例: 鈴木 太郎 先生" />
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={director}
+                      onChange={e => setDirector(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ director: e.target.value })}
+                      placeholder="例: 鈴木 太郎 先生"
+                    />
                   </div>
                   <div>
                     <strong>🏥 診療科目:</strong>
-                    <input type="text" className="mock-input" value={department} onChange={e => setDepartment(e.target.value)} placeholder="例: 内科・消化器内科" />
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={department}
+                      onChange={e => setDepartment(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ department: e.target.value })}
+                      placeholder="例: 内科・消化器内科"
+                    />
                   </div>
                   <div>
                     <strong>📅 予約システム:</strong>
-                    <input type="text" className="mock-input" value={reservationSystem} onChange={e => setReservationSystem(e.target.value)} placeholder="例: デジスマ / Web予約あり" />
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={reservationSystem}
+                      onChange={e => setReservationSystem(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ reservationSystem: e.target.value })}
+                      placeholder="例: デジスマ / Web予約あり"
+                    />
                   </div>
                 </div>
 
-                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    💡 各項目は入力後（フォーカス外れ時）およびカレンダー操作時に自動保存されます
+                  </span>
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -1271,124 +1487,993 @@ ${(project.activities || []).map(a => {
                   </button>
                 </div>
               </div>
+
+              {/* 全タブ連動サマリーカード（7 STEP 仕様・キャッシュレス・kz補助金・現地調査が基本情報から一目で確認＆ジャンプ可能） */}
+              {(() => {
+                const pm = project.pipelineMap || {};
+                const gate = getProjectSpecAndGateSummary(project);
+                return (
+                  <div className="card" style={{ padding: '1rem', border: '1.5px solid #93c5fd', backgroundColor: '#f8fafc' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#1e3a8a' }}>
+                        🔗 全タブ連動ステータス（仕様・キャッシュレス・kz補助金・現地調査）
+                      </strong>
+                      <span style={{ fontSize: '0.74rem', color: '#475569' }}>
+                        各カードをクリックすると該当タブへ移動して編集できます
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '0.65rem' }}>
+                      {/* 1. 7 STEP 仕様 */}
+                      <div
+                        onClick={() => setActiveTab('deviceInfo')}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: '0.55rem',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #bfdbfe',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <strong style={{ fontSize: '0.8rem', color: '#1e40af' }}>🎨 7 STEP 仕様選択</strong>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: gate.specCompletedCount === 7 ? '#15803d' : '#1d4ed8' }}>
+                            {gate.specCompletedCount}/7 完了 ➔
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div>・本体色: <strong>{pm.bodyColor || '未選択'}</strong> / 釣銭機: <strong>{pm.changeMachineColor || '未選択'}</strong></div>
+                          <div>・画面色: <strong>{pm.screenColor || '未選択'}</strong> / トリガー: <strong>{pm.triggerMethod || '未選択'}</strong></div>
+                          <div>・BM-POS用PC: <strong>{pm.bmposPcOption || '未選択'}</strong></div>
+                        </div>
+                      </div>
+
+                      {/* 2. キャッシュレス・審査 */}
+                      <div
+                        onClick={() => setActiveTab('cashlessStatus')}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: '0.55rem',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #fde68a',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <strong style={{ fontSize: '0.8rem', color: '#b45309' }}>💳 キャッシュレス・審査</strong>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: gate.creditApproved ? '#15803d' : '#b45309' }}>
+                            {gate.creditApproved ? '審査通過 ✓' : '確認・編集 ➔'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div>・クレジット: <strong>{pm.creditStatus || '未設定'}</strong></div>
+                          <div>・JCB系: <strong>{pm.jcbCreditStatus || '未設定'}</strong></div>
+                          <div>・電子マネー/QR: <strong>{pm.emoneyStatus || '未設定'} / {pm.qrStatus || '未設定'}</strong></div>
+                        </div>
+                      </div>
+
+                      {/* 3. kz補助金・書類3点・2回支払 */}
+                      <div
+                        onClick={() => setActiveTab('prepStatus')}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: '0.55rem',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #a7f3d0',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <strong style={{ fontSize: '0.8rem', color: '#047857' }}>💰 kz補助金・公的書類</strong>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#047857' }}>
+                            書類 {gate.docsReadyCount}/4 ➔
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div>・現在フェーズ: <strong>{gate.introPhase}</strong> ({pm.kzGrantAdopted ? '採択・受注済' : '進行中'})</div>
+                          <div>・①KIZASHI報酬: <strong>{pm.payment1KzFeeStatus || '未請求'}</strong></div>
+                          <div>・②本体代金支払: <strong>{pm.payment2TemasakStatus || '未請求'}</strong></div>
+                        </div>
+                      </div>
+
+                      {/* 4. 現地調査 確認1〜5 */}
+                      <div
+                        onClick={() => setActiveTab('installation')}
+                        style={{
+                          padding: '0.75rem',
+                          borderRadius: '0.55rem',
+                          backgroundColor: '#ffffff',
+                          border: '1px solid #ddd6fe',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <strong style={{ fontSize: '0.8rem', color: '#6d28d9' }}>🔌 現地調査 確認1〜5</strong>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: gate.surveyReadyCount === 5 ? '#15803d' : '#6d28d9' }}>
+                            {gate.surveyReadyCount}/5 完了 ➔
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
+                          <div>・レセコン: <strong>{pm.receiptComputer || '未入力'}</strong></div>
+                          <div>・現調日: <strong>{project.surveyDate || '未定'}</strong></div>
+                          <div>・設置予定日: <strong>{project.installationDate || '未定'}</strong></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {activeTab === 'pipelineMap' && (
             <div className="drawer-section" style={{ backgroundColor: '#f8fafc' }}>
               <h3 style={{ fontSize: '1rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-                案件の現在地（ワークフロー）
+                案件の現在地（営業8段階フロー ＆ PDF準拠：導入4フェーズ 連動ワークフロー）
               </h3>
-              <ProjectProgressMap project={project} />
+              <ProjectProgressMap
+                project={project}
+                onUpdateProject={onUpdateProject}
+                onJumpToTab={(tab) => setActiveTab(tab)}
+              />
             </div>
           )}
 
           {activeTab === 'deviceInfo' && (
-            <div className="drawer-section" style={{ backgroundColor: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>機器・補助金情報</h3>
-                <button 
-                  className="btn btn-primary" 
-                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}
-                  onClick={() => {
-                    if (onUpdateProject) {
-                      const deviceType = (document.getElementById('edit-device-type') as HTMLSelectElement).value;
-                      const bodyColor = (document.getElementById('edit-body-color') as HTMLSelectElement).value;
-                      const changeMachineColor = (document.getElementById('edit-change-machine-color') as HTMLSelectElement).value;
-                      const subsidyName = (document.getElementById('edit-subsidy-name') as HTMLSelectElement).value;
-                      
-                      onUpdateProject(project.id, {
-                        pipelineMap: {
-                          ...project.pipelineMap,
-                          deviceType,
-                          bodyColor,
-                          changeMachineColor,
-                          subsidyName
-                        }
-                      });
-                      alert('機器・補助金情報を保存しました。');
+            <div className="drawer-section" style={{ backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              {(() => {
+                const pm = project.pipelineMap || {};
+                const gate = getProjectSpecAndGateSummary(project);
+                const saveSpecField = (updates: Partial<PipelineMap>, msg?: string) => {
+                  onUpdateProject?.(project.id, {
+                    pipelineMap: {
+                      ...pm,
+                      ...updates
                     }
-                  }}
-                >
-                  <Save size={14} /> 保存
-                </button>
-              </div>
-              <div className="card" style={{ padding: '1rem' }}>
-                <div className="two-col-grid" style={{ fontSize: '0.875rem', gap: '0.5rem' }}>
-                  <div>
-                    <strong>タイプ:</strong> 
-                    <select id="edit-device-type" className="mock-input" defaultValue={project.pipelineMap?.deviceType || 'テマサックPro スタンドタイプ'}>
-                      <option value="テマサックPro スタンドタイプ">テマサックPro スタンドタイプ</option>
-                      <option value="テマサックPro カウンタータイプ">テマサックPro カウンタータイプ</option>
-                      <option value="テマサックLite（キャッシュレス専用タイプ）">テマサックLite（キャッシュレス専用タイプ）</option>
-                    </select>
-                  </div>
-                  <div>
-                    <strong>機器カラー:</strong> 
-                    <select id="edit-body-color" className="mock-input" defaultValue={project.pipelineMap?.bodyColor || masterData.deviceColors[0]}>
-                      {masterData.deviceColors.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <strong>釣銭機カラー:</strong> 
-                    <select id="edit-change-machine-color" className="mock-input" defaultValue={project.pipelineMap?.changeMachineColor || masterData.changeMachineColors[0]}>
-                      {masterData.changeMachineColors.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <strong>補助金:</strong> 
-                    <select id="edit-subsidy-name" className="mock-input" defaultValue={project.pipelineMap?.subsidyName || '希望無し'}>
-                      <option value="希望">希望</option>
-                      <option value="希望無し">希望無し</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+                  });
+                  if (msg) {
+                    setCashlessSaveMsg(msg);
+                    setTimeout(() => setCashlessSaveMsg(null), 2500);
+                  }
+                };
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          🎨 テマサック 7 STEP 仕様選択ガイド（PDF Page 3〜5 完全準拠）
+                        </h3>
+                        <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '0.2rem' }}>
+                          商談・お打ち合わせ中に各カードをクリックするだけで、7つの仕様がリアルタイムに決定・保存されます。
+                        </div>
+                      </div>
+                      <span style={{
+                        padding: '0.3rem 0.75rem',
+                        borderRadius: '999px',
+                        backgroundColor: gate.specCompletedCount === 7 ? '#059669' : '#1e40af',
+                        color: '#ffffff',
+                        fontSize: '0.78rem',
+                        fontWeight: 900
+                      }}>
+                        仕様決定進捗: {gate.specCompletedCount} / 7 STEP 完了
+                      </span>
+                    </div>
+
+                    {cashlessSaveMsg && (
+                      <div style={{
+                        padding: '0.5rem 0.85rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#ecfdf5',
+                        border: '1px solid #6ee7b7',
+                        color: '#065f46',
+                        fontSize: '0.78rem',
+                        fontWeight: 800
+                      }}>
+                        {cashlessSaveMsg}
+                      </div>
+                    )}
+
+                    {/* STEP 1｜本体カラー選択（基本オールカラー3種 ／ 側面オプション6種） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#c2410c' }}>
+                          STEP 1 ｜ 本体カラー選択（基本オールカラー3種 ／ 側面オプション6種）
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.bodyColor ? '#15803d' : '#64748b' }}>
+                          {pm.bodyColor ? `✓ 選択中: ${pm.bodyColor}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(185px, 1fr))', gap: '0.6rem' }}>
+                        {TEMASAK_BODY_COLORS.map(c => {
+                          const isSel = pm.bodyColor === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => saveSpecField({ bodyColor: c.id }, `✅ STEP 1 本体カラーを「${c.label}」に設定しました`)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.65rem',
+                                padding: '0.6rem 0.75rem',
+                                borderRadius: '0.55rem',
+                                border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ display: 'flex', width: '32px', height: '38px', borderRadius: '4px', overflow: 'hidden', border: '1px solid #94a3b8', flexShrink: 0 }}>
+                                <div style={{ flex: 1, backgroundColor: c.mainHex }} />
+                                <div style={{ width: '11px', backgroundColor: c.sideHex, borderLeft: '1px solid #cbd5e1' }} />
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 900, color: isSel ? '#1e40af' : '#0f172a' }}>{c.label}</div>
+                                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: c.category === '基本オールカラー' ? '#2563eb' : '#64748b' }}>
+                                  {c.category}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* STEP 2｜釣銭機カラー選択（2色から選択） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e3a8a' }}>
+                          STEP 2 ｜ 釣銭機カラー選択（2色から選択）
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.changeMachineColor ? '#15803d' : '#64748b' }}>
+                          {pm.changeMachineColor ? `✓ 選択中: ${pm.changeMachineColor}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                        {TEMASAK_CHANGE_MACHINE_COLORS.map(c => {
+                          const isSel = pm.changeMachineColor === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => saveSpecField({ changeMachineColor: c.id }, `✅ STEP 2 釣銭機カラーを「${c.label}」に設定しました`)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                padding: '0.75rem 0.9rem',
+                                borderRadius: '0.6rem',
+                                border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ width: '34px', height: '34px', borderRadius: '6px', backgroundColor: c.hex, border: '1px solid #94a3b8', flexShrink: 0 }} />
+                              <div>
+                                <div style={{ fontSize: '0.86rem', fontWeight: 900, color: isSel ? '#1e40af' : '#0f172a' }}>{c.label}</div>
+                                <div style={{ fontSize: '0.72rem', color: '#475569' }}>{c.subtitle}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* STEP 3｜画面カラー選択（全9色） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e3a8a' }}>
+                          STEP 3 ｜ 患者様が触れる画面カラー選択（全9色）
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.screenColor ? '#15803d' : '#64748b' }}>
+                          {pm.screenColor ? `✓ 選択中: ${pm.screenColor}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(155px, 1fr))', gap: '0.5rem' }}>
+                        {TEMASAK_SCREEN_COLORS.map(c => {
+                          const isSel = pm.screenColor === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => saveSpecField({ screenColor: c.id }, `✅ STEP 3 画面カラーを「${c.label}」に設定しました`)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.55rem',
+                                padding: '0.5rem 0.7rem',
+                                borderRadius: '0.5rem',
+                                border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ width: '22px', height: '22px', borderRadius: '4px', backgroundColor: c.hex, flexShrink: 0 }} />
+                              <span style={{ fontSize: '0.78rem', fontWeight: isSel ? 900 : 700, color: isSel ? '#1e40af' : '#0f172a' }}>
+                                {c.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* STEP 4｜サイネージ選択（3方式）＆ 領収印データのご準備 */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#1d4ed8' }}>
+                          STEP 4 ｜ サイネージ選択（3方式）＆ 領収印データのご準備
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.signageMode ? '#15803d' : '#64748b' }}>
+                          {pm.signageMode ? `✓ 選択中: ${pm.signageMode}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.65rem' }}>
+                        {TEMASAK_SIGNAGE_MODES.map(m => {
+                          const isSel = pm.signageMode === m.id;
+                          return (
+                            <div
+                              key={m.id}
+                              onClick={() => saveSpecField({ signageMode: m.id, signageData: true }, `✅ STEP 4 サイネージを「${m.label}」に設定しました`)}
+                              style={{
+                                padding: '0.75rem 0.85rem',
+                                borderRadius: '0.6rem',
+                                border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.84rem', fontWeight: 900, color: isSel ? '#1e40af' : '#0f172a' }}>{m.label}</div>
+                              <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.25rem', lineHeight: 1.4 }}>{m.subtitle}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {pm.signageMode === '方式C：動画（YouTubeのURL）' && (
+                        <div style={{ marginTop: '0.65rem' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af' }}>YouTube動画URL:</label>
+                          <input
+                            type="url"
+                            className="mock-input"
+                            placeholder="https://www.youtube.com/watch?v=..."
+                            defaultValue={pm.signageYoutubeUrl || ''}
+                            onBlur={e => saveSpecField({ signageYoutubeUrl: e.target.value }, '✅ YouTube動画URLを保存しました')}
+                          />
+                        </div>
+                      )}
+
+                      {/* 【重要】サイネージ・領収印データのご注意（PDF Page 3） */}
+                      <div style={{
+                        marginTop: '0.75rem',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#fff7ed',
+                        border: '1px solid #fdba74',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.5rem'
+                      }}>
+                        <div style={{ fontSize: '0.74rem', color: '#9a3412', fontWeight: 700 }}>
+                          ⚠️ 【重要】サイネージ・領収印データ：納入時は簡易作製可能（納入後の事後修正不可）。変更希望時は医院様よりデータ支給。
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          {['弊社簡易作製（事後修正不可を案内済）', '医院様よりデータご支給'].map(opt => {
+                            const isSel = pm.stampDataSource === opt;
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => saveSpecField({ stampDataSource: opt }, `✅ データ準備方法を「${opt}」に設定しました`)}
+                                style={{
+                                  padding: '0.25rem 0.6rem',
+                                  borderRadius: '0.4rem',
+                                  border: isSel ? '2px solid #ea580c' : '1px solid #fdba74',
+                                  backgroundColor: isSel ? '#ea580c' : '#ffffff',
+                                  color: isSel ? '#ffffff' : '#9a3412',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {isSel ? `✓ ${opt}` : opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* STEP 5｜精算開始トリガー選択（9種・3系統） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#c2410c' }}>
+                          STEP 5 ｜ 精算開始トリガー選択（全9方式）
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.triggerMethod ? '#15803d' : '#64748b' }}>
+                          {pm.triggerMethod ? `✓ 選択中: ${pm.triggerMethod}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.75rem' }}>
+                        {(['■ 診察券・アプリ系', '■ 明細書・領収書 印字系', '■ 単票プリント出力系'] as const).map(grp => (
+                          <div key={grp} style={{ backgroundColor: '#f8fafc', padding: '0.65rem', borderRadius: '0.55rem', border: '1px solid #e2e8f0' }}>
+                            <div style={{ fontSize: '0.76rem', fontWeight: 900, color: '#334155', marginBottom: '0.45rem' }}>{grp}</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                              {TEMASAK_TRIGGER_METHODS.filter(t => t.group === grp).map(t => {
+                                const isSel = pm.triggerMethod === t.id;
+                                return (
+                                  <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => saveSpecField({ triggerMethod: t.id, triggerMethodCheck: true }, `✅ STEP 5 精算開始トリガーを「${t.label}」に設定しました`)}
+                                    style={{
+                                      textAlign: 'left',
+                                      padding: '0.42rem 0.65rem',
+                                      borderRadius: '0.4rem',
+                                      border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                      backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                      color: isSel ? '#1e40af' : '#0f172a',
+                                      fontSize: '0.78rem',
+                                      fontWeight: isSel ? 900 : 700,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {isSel ? `● ${t.label}` : `○ ${t.label}`}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* STEP 6｜キャッシュレス決済の選択（複数組み合わせ可） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e3a8a' }}>
+                          STEP 6 ｜ キャッシュレス決済の選択（複数組み合わせ可）
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('cashlessStatus')}
+                          style={{
+                            padding: '0.25rem 0.65rem',
+                            borderRadius: '0.4rem',
+                            border: '1px solid #2563eb',
+                            backgroundColor: '#eff6ff',
+                            color: '#1d4ed8',
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          💳 ジャックス審査・詳細設定を開く ▸
+                        </button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.55rem' }}>
+                        {CASHLESS_PAYMENT_CATEGORIES.map(cat => {
+                          const isSelected = cashlessOptions.includes(cat.id);
+                          return (
+                            <div
+                              key={cat.id}
+                              onClick={() => {
+                                const nextSelected = isSelected
+                                  ? cashlessOptions.filter(id => id !== cat.id)
+                                  : [...cashlessOptions, cat.id];
+                                setCashlessOptions(nextSelected);
+                                saveSpecField(
+                                  {
+                                    cashlessOptions: nextSelected,
+                                    creditStatus: cat.id === 'credit' ? (!isSelected ? creditStatus || '導入希望' : '') : creditStatus,
+                                    jcbCreditStatus: cat.id === 'jcb_credit' ? (!isSelected ? jcbCreditStatus || '導入希望' : '') : jcbCreditStatus,
+                                    emoneyStatus: cat.id === 'emoney' ? (!isSelected ? emoneyStatus || '導入希望' : '') : emoneyStatus,
+                                    qrStatus: cat.id === 'qr' ? (!isSelected ? qrStatus || '導入希望' : '') : qrStatus
+                                  },
+                                  `✅ STEP 6 キャッシュレス選択を更新しました`
+                                );
+                              }}
+                              style={{
+                                padding: '0.65rem 0.8rem',
+                                borderRadius: '0.55rem',
+                                border: isSelected ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSelected ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.82rem', fontWeight: 900, color: isSelected ? '#1e40af' : '#0f172a' }}>
+                                {isSelected ? '☑ ' : '☐ '}{cat.title}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.2rem' }}>{cat.subtitle}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* STEP 7｜BM-POS用PC選択（新規購入 または 所有PC利用） */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#c2410c' }}>
+                          STEP 7 ｜ 受付内 BM-POS用PC選択（新規購入 または 所有PC利用）
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: pm.bmposPcOption ? '#15803d' : '#64748b' }}>
+                          {pm.bmposPcOption ? `✓ ${pm.bmposPcOption}` : '未選択'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '0.75rem' }}>
+                        {TEMASAK_BMPOS_PC_OPTIONS.map(opt => {
+                          const isSel = pm.bmposPcOption === opt.id;
+                          return (
+                            <div
+                              key={opt.id}
+                              onClick={() => saveSpecField({ bmposPcOption: opt.id, bmposPcPrep: true }, `✅ STEP 7 BM-POS用PCを「${opt.label}」に設定しました`)}
+                              style={{
+                                padding: '0.8rem 0.95rem',
+                                borderRadius: '0.6rem',
+                                border: isSel ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                                backgroundColor: isSel ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.86rem', fontWeight: 900, color: isSel ? '#1e40af' : '#0f172a' }}>{opt.label}</div>
+                              <div style={{ fontSize: '0.73rem', color: '#475569', marginTop: '0.25rem', lineHeight: 1.4 }}>{opt.subtitle}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* 【BM-POS用PCの必須スペック要件】（PDF Page 5） */}
+                      <div style={{
+                        marginTop: '0.75rem',
+                        padding: '0.7rem 0.9rem',
+                        borderRadius: '0.55rem',
+                        backgroundColor: '#fff7ed',
+                        border: '1px solid #fdba74'
+                      }}>
+                        <div style={{ fontSize: '0.76rem', fontWeight: 900, color: '#c2410c', marginBottom: '0.4rem' }}>
+                          【BM-POS用PCの必須スペック要件】（所有PC利用時は3項目すべて必須）
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.85rem', fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!pm.bmposSpecCpuCheck}
+                              onChange={e => saveSpecField({ bmposSpecCpuCheck: e.target.checked })}
+                            />
+                            CPU：Intel Core i5（第11世代以上）
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!pm.bmposSpecRamCheck}
+                              onChange={e => saveSpecField({ bmposSpecRamCheck: e.target.checked })}
+                            />
+                            メモリ：8GB以上（資料表記：8M以上）
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={!!pm.bmposSpecDedicatedCheck}
+                              onChange={e => saveSpecField({ bmposSpecDedicatedCheck: e.target.checked })}
+                            />
+                            用途：BM-POS専用機（他ソフトとの相乗り不可）
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
           {activeTab === 'prepStatus' && (
-            <div className="drawer-section" style={{ backgroundColor: '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>各種確認・準備状況</h3>
-                <button 
-                  className="btn btn-primary" 
-                  style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}
-                  onClick={() => {
-                    if (onUpdateProject) {
-                      onUpdateProject(project.id, {
-                        surveyDate: (document.getElementById('edit-survey-date') as HTMLInputElement).value,
-                        installationDate: (document.getElementById('edit-install-date') as HTMLInputElement).value
-                      });
-                      alert('準備状況・日程を保存しました。');
+            <div className="drawer-section" style={{ backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {(() => {
+                const pm = project.pipelineMap || {};
+                const gate = getProjectSpecAndGateSummary(project);
+                const isIndividual = pm.entityType === '個人事業主';
+                const savePrep = (updates: Partial<PipelineMap>, msg?: string) => {
+                  onUpdateProject?.(project.id, {
+                    pipelineMap: {
+                      ...pm,
+                      ...updates
                     }
-                  }}
-                >
-                  <Save size={14} /> 保存
-                </button>
-              </div>
-              <div className="card" style={{ padding: '1rem' }}>
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border-color)' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>現地調査日</label>
-                    <input type="date" id="edit-survey-date" className="mock-input" defaultValue={project.surveyDate || ''} style={{ width: '100%' }} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>設置工事日</label>
-                    <input type="date" id="edit-install-date" className="mock-input" defaultValue={project.installationDate || ''} style={{ width: '100%' }} />
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.875rem' }}>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.triggerMethodCheck} /> トリガー方法確認</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.hpsEstimateReply} /> HPS見積注文書返信</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.magnetPrep} /> マグネット準備</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.signageData} /> サイネージデータ</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.threePieceSetPrep} /> 3点セット準備</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.bmposPcPrep} /> BMPOS用PC準備</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.constructionCheck} /> 工事手配確認</label>
-                  <label><input type="checkbox" defaultChecked={project.pipelineMap?.shippingCheck} /> 出荷手配確認</label>
-                </div>
-              </div>
+                  });
+                  if (msg) {
+                    setCashlessSaveMsg(msg);
+                    setTimeout(() => setCashlessSaveMsg(null), 2500);
+                  }
+                };
+
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0, color: '#0f172a' }}>
+                          💰 デジタル化AI導入補助金 ＆ KIZASHI（kz）公的書類3点・2回お支払い管理
+                        </h3>
+                        <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '0.2rem' }}>
+                          PDF Page 2・6・7・10 準拠：公的書類3点＋GbizID、KIZASHI申請ステップ、2回のお支払いを一元管理します。
+                        </div>
+                      </div>
+                    </div>
+
+                    {cashlessSaveMsg && (
+                      <div style={{
+                        padding: '0.5rem 0.85rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#ecfdf5',
+                        border: '1px solid #6ee7b7',
+                        color: '#065f46',
+                        fontSize: '0.78rem',
+                        fontWeight: 800
+                      }}>
+                        {cashlessSaveMsg}
+                      </div>
+                    )}
+
+                    {/* PDF Page 10: スムーズな導入スタートに向けて、まず最初にお願いしたい4つのアクション (ACT 1〜ACT 4) */}
+                    <div className="card" style={{ padding: '1rem', border: '1.5px solid #2563eb', backgroundColor: '#eff6ff' }}>
+                      <div style={{ fontSize: '0.86rem', fontWeight: 900, color: '#1e40af', marginBottom: '0.65rem' }}>
+                        ■ スムーズな導入スタートに向けて、まず最初にお願いしたい4つのアクション（PDF P.10）
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.6rem' }}>
+                        {[
+                          {
+                            key: 'act1DocsReady' as const,
+                            title: 'ACT 1｜GbizID・公的書類3点',
+                            desc: 'GbizID取得に加え、①前年度納税証明書、②確定申告書、③登記事項全部証明書（法人のみ）を準備'
+                          },
+                          {
+                            key: 'act2ConsentSent' as const,
+                            title: 'ACT 2｜同意書・希望シート送信',
+                            desc: '②補助金同意書と③キャッシュレス導入希望シートに署名・捺印しメール送信（原本は要保管）'
+                          },
+                          {
+                            key: 'act3SurveyReady' as const,
+                            title: 'ACT 3｜現地調査日程・書類用意',
+                            desc: '④現地調査の日程を調整し、当日までに「レセコン等のIPアドレス」と「プロバイダ申込書類」を用意'
+                          },
+                          {
+                            key: 'act4SpecsDecided' as const,
+                            title: 'ACT 4｜7 STEP 仕様・データ決定',
+                            desc: '本体・釣銭機・画面カラーやトリガー方式を決定し、変更希望時はサイネージ・領収印データを準備'
+                          }
+                        ].map(act => {
+                          const checked = !!pm[act.key];
+                          return (
+                            <div
+                              key={act.key}
+                              onClick={() => savePrep({ [act.key]: !checked }, `✅ ${act.title} を更新しました`)}
+                              style={{
+                                padding: '0.7rem 0.8rem',
+                                borderRadius: '0.55rem',
+                                border: checked ? '2px solid #059669' : '1px solid #93c5fd',
+                                backgroundColor: checked ? '#ecfdf5' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.8rem', fontWeight: 900, color: checked ? '#065f46' : '#1e3a8a' }}>
+                                {checked ? '☑ ' : '☐ '}{act.title}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.25rem', lineHeight: 1.35 }}>
+                                {act.desc}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* PDF Page 7: 事前準備｜申請前にご用意いただく公的書類3点 ＋ GbizIDプライム */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#c2410c' }}>
+                          📄 事前準備｜申請前にご用意いただく3つの公的書類 ＋ GbizIDプライム（PDF P.7）
+                        </strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569' }}>経営形態:</span>
+                          {(['医療法人（法人）', '個人事業主'] as const).map(et => {
+                            const active = (pm.entityType || '医療法人（法人）') === et;
+                            return (
+                              <button
+                                key={et}
+                                type="button"
+                                onClick={() => savePrep({ entityType: et }, `経営形態を「${et}」に設定しました`)}
+                                style={{
+                                  padding: '0.22rem 0.6rem',
+                                  borderRadius: '999px',
+                                  border: active ? '2px solid #0f766e' : '1px solid #cbd5e1',
+                                  backgroundColor: active ? '#0f766e' : '#ffffff',
+                                  color: active ? '#ffffff' : '#334155',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {et}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.65rem' }}>
+                        <div
+                          onClick={() => savePrep({ docTaxCert: !pm.docTaxCert }, '✅ 【書類①】前年度の納税証明書を更新しました')}
+                          style={{
+                            padding: '0.75rem 0.85rem',
+                            borderRadius: '0.55rem',
+                            border: pm.docTaxCert ? '2px solid #059669' : '1px solid #cbd5e1',
+                            backgroundColor: pm.docTaxCert ? '#ecfdf5' : '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div style={{ fontSize: '0.82rem', fontWeight: 900, color: pm.docTaxCert ? '#065f46' : '#c2410c' }}>
+                            {pm.docTaxCert ? '☑ ' : '☐ '}【書類 ①】前年度の納税証明書
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.2rem' }}>
+                            所轄の税務署等で発行される前年度分の納税証明書をご用意ください。
+                          </div>
+                        </div>
+
+                        <div
+                          onClick={() => savePrep({ docTaxReturn: !pm.docTaxReturn }, '✅ 【書類②】確定申告書を更新しました')}
+                          style={{
+                            padding: '0.75rem 0.85rem',
+                            borderRadius: '0.55rem',
+                            border: pm.docTaxReturn ? '2px solid #059669' : '1px solid #cbd5e1',
+                            backgroundColor: pm.docTaxReturn ? '#ecfdf5' : '#ffffff',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          <div style={{ fontSize: '0.82rem', fontWeight: 900, color: pm.docTaxReturn ? '#065f46' : '#c2410c' }}>
+                            {pm.docTaxReturn ? '☑ ' : '☐ '}【書類 ②】確定申告書
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.2rem' }}>
+                            直近分の確定申告書の控え一式をご用意ください。
+                          </div>
+                        </div>
+
+                        <div
+                          onClick={() => {
+                            if (isIndividual) return;
+                            savePrep({ docRegistryCert: !pm.docRegistryCert }, '✅ 【書類③】登記事項全部証明書を更新しました');
+                          }}
+                          style={{
+                            padding: '0.75rem 0.85rem',
+                            borderRadius: '0.55rem',
+                            border: isIndividual ? '1px dashed #94a3b8' : pm.docRegistryCert ? '2px solid #059669' : '1px solid #cbd5e1',
+                            backgroundColor: isIndividual ? '#f1f5f9' : pm.docRegistryCert ? '#ecfdf5' : '#ffffff',
+                            cursor: isIndividual ? 'default' : 'pointer',
+                            opacity: isIndividual ? 0.75 : 1
+                          }}
+                        >
+                          <div style={{ fontSize: '0.82rem', fontWeight: 900, color: isIndividual ? '#64748b' : pm.docRegistryCert ? '#065f46' : '#c2410c' }}>
+                            {isIndividual ? 'ー 【書類 ③】個人事業主のため不要' : `${pm.docRegistryCert ? '☑ ' : '☐ '}【書類 ③】登記事項全部証明書（法人のみ）`}
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.2rem' }}>
+                            医療法人等の法人様のみ必要となります（個人事業主の医院様は不要です）。
+                          </div>
+                        </div>
+
+                        <div style={{
+                          padding: '0.75rem 0.85rem',
+                          borderRadius: '0.55rem',
+                          border: pm.gbizIdPrimeStatus === '取得済' ? '2px solid #2563eb' : '1px solid #93c5fd',
+                          backgroundColor: pm.gbizIdPrimeStatus === '取得済' ? '#eff6ff' : '#ffffff'
+                        }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 900, color: '#1d4ed8' }}>
+                            【アカウント ①】GbizID（ジービズIDプライム）
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.4rem' }}>
+                            {(['未取得', '申請中', '取得済'] as const).map(st => {
+                              const isSel = (pm.gbizIdPrimeStatus || '未取得') === st;
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => savePrep({ gbizIdPrimeStatus: st }, `✅ GbizIDプライムを「${st}」に更新しました`)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.25rem 0.4rem',
+                                    borderRadius: '0.35rem',
+                                    border: isSel ? '2px solid #1d4ed8' : '1px solid #cbd5e1',
+                                    backgroundColor: isSel ? '#1d4ed8' : '#ffffff',
+                                    color: isSel ? '#ffffff' : '#334155',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {st}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PDF Page 6 & 7: 補助金枠選択 ＆ KIZASHI（コンサルタント）連携 3 STEP */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#0f766e' }}>
+                          🤝 補助金枠（最大4/5補助）＆ コンサルタント（KIZASHI）申請 3 STEP（PDF P.6〜7）
+                        </strong>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.6rem', marginBottom: '0.85rem' }}>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155' }}>活用する補助金枠・類型:</label>
+                          <select
+                            className="mock-input"
+                            value={pm.subsidyName || 'インボイス枠（インボイス対応類型）★注目'}
+                            onChange={e => savePrep({ subsidyName: e.target.value }, `✅ 補助金枠を「${e.target.value}」に設定しました`)}
+                          >
+                            {SUBSIDY_FRAME_OPTIONS.map(opt => (
+                              <option key={opt.id} value={opt.id}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155' }}>申請前準備目安（例: 5/12）:</label>
+                          <input
+                            type="date"
+                            className="mock-input"
+                            defaultValue={pm.referralDeadline || ''}
+                            onBlur={e => savePrep({ referralDeadline: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155' }}>補助金 申請締切日（例: 6/19）:</label>
+                          <input
+                            type="date"
+                            className="mock-input"
+                            defaultValue={pm.applicationDeadline || ''}
+                            onBlur={e => savePrep({ applicationDeadline: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.74rem', fontWeight: 800, color: '#334155' }}>交付決定予定・決定日（例: 7/29）:</label>
+                          <input
+                            type="date"
+                            className="mock-input"
+                            defaultValue={pm.grantDecisionDate || ''}
+                            onBlur={e => savePrep({ grantDecisionDate: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.6rem' }}>
+                        {[
+                          {
+                            key: 'kzStep1ConsentSent' as const,
+                            title: 'STEP 1｜② 補助金同意書 署名捺印・メール送信',
+                            desc: 'スキャンデータをメール受領済（※重要：同意書原本は医院様にて保管）'
+                          },
+                          {
+                            key: 'kzStep2Contacted' as const,
+                            title: 'STEP 2｜コンサルタント（KIZASHI）からの連絡',
+                            desc: 'KIZASHIより医院様へメール・電話連絡済、申請スケジュール確認済'
+                          },
+                          {
+                            key: 'kzStep3Applied' as const,
+                            title: 'STEP 3｜⑤ KIZASHIリードによる補助金申請実施',
+                            desc: 'KIZASHIの手順リードのもと、医院様にて補助金申請完了'
+                          },
+                          {
+                            key: 'kzGrantAdopted' as const,
+                            title: '🎉 交付決定（採択決定）➔ 受注確定',
+                            desc: '補助金の交付決定（採択）通知完了！PHASE 3（注文書・設置調整）へ進行'
+                          }
+                        ].map(st => {
+                          const done = !!pm[st.key];
+                          return (
+                            <div
+                              key={st.key}
+                              onClick={() => savePrep({ [st.key]: !done }, `✅ ${st.title} を更新しました`)}
+                              style={{
+                                padding: '0.7rem 0.85rem',
+                                borderRadius: '0.55rem',
+                                border: done ? '2px solid #0891b2' : '1px solid #cbd5e1',
+                                backgroundColor: done ? '#ecfeff' : '#ffffff',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ fontSize: '0.8rem', fontWeight: 900, color: done ? '#0e7490' : '#0f172a' }}>
+                                {done ? '☑ ' : '☐ '}{st.title}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.2rem', lineHeight: 1.35 }}>
+                                {st.desc}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* PDF Page 10: お支払いは「交付決定時」と「設置完了時」の2回に分かれます */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#0f172a', display: 'block', marginBottom: '0.75rem' }}>
+                        💴 2回のお支払い管理（PDF P.10：「交付決定時」と「設置完了時」の2段階）
+                      </strong>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.8rem' }}>
+                        <div style={{ padding: '0.85rem', borderRadius: '0.6rem', backgroundColor: '#fff7ed', border: '1.5px solid #fb923c' }}>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 900, color: '#c2410c' }}>
+                            1回目のお支払い｜⑦ 補助金申請コンサルタント（KIZASHI）報酬
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#9a3412', marginTop: '0.2rem', fontWeight: 700 }}>
+                            ■ ご請求タイミング：補助金の「交付決定（採択決定）」時点<br />
+                            ※【ご注意】KIZASHIへのお支払い時期は、テマサック本体の設置前になります。
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.55rem' }}>
+                            {(['未請求', '請求書発送済', '支払完了'] as const).map(st => {
+                              const isSel = (pm.payment1KzFeeStatus || '未請求') === st;
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => savePrep({ payment1KzFeeStatus: st }, `✅ 1回目支払（KIZASHI報酬）を「${st}」に更新しました`)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.3rem 0.5rem',
+                                    borderRadius: '0.4rem',
+                                    border: isSel ? '2px solid #c2410c' : '1px solid #fdba74',
+                                    backgroundColor: isSel ? '#c2410c' : '#ffffff',
+                                    color: isSel ? '#ffffff' : '#9a3412',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {st}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div style={{ padding: '0.85rem', borderRadius: '0.6rem', backgroundColor: '#f8fafc', border: '1.5px solid #64748b' }}>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 900, color: '#1e293b' }}>
+                            2回目のお支払い｜● テマサック代金（＋2年分の保守料）
+                          </div>
+                          <div style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.2rem', fontWeight: 700 }}>
+                            ■ ご請求タイミング：テマサック本体の「設置完了」時点<br />
+                            ※設置後すぐに安心してお使いいただけるよう、2年分の保守料を含めたご案内です。
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.55rem' }}>
+                            {(['未請求', '請求書発送済', '支払完了'] as const).map(st => {
+                              const isSel = (pm.payment2TemasakStatus || '未請求') === st;
+                              return (
+                                <button
+                                  key={st}
+                                  type="button"
+                                  onClick={() => savePrep({ payment2TemasakStatus: st }, `✅ 2回目支払（テマサック代金＋2年保守料）を「${st}」に更新しました`)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.3rem 0.5rem',
+                                    borderRadius: '0.4rem',
+                                    border: isSel ? '2px solid #1e293b' : '1px solid #cbd5e1',
+                                    backgroundColor: isSel ? '#1e293b' : '#ffffff',
+                                    color: isSel ? '#ffffff' : '#334155',
+                                    fontSize: '0.74rem',
+                                    fontWeight: 800,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {st}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -1754,6 +2839,142 @@ ${(project.activities || []).map(a => {
                   )}
                 </div>
               </div>
+
+              {/* PDF Page 8: キャッシュレス審査（ジャックス）4ステップ ＆ 本体設置の前提条件ゲート */}
+              {(() => {
+                const pm = project.pipelineMap || {};
+                const steps = [
+                  { id: 'STEP1_希望シート作成', label: 'STEP 1｜希望シートの作成', desc: '導入する決済の種類・ブランドを選択' },
+                  { id: 'STEP2_署名メール送信', label: 'STEP 2｜署名捺印・メール送信', desc: 'スキャンデータをメール送信（原本は要保管）' },
+                  { id: 'STEP3_ジャックス連絡済', label: 'STEP 3｜ジャックスより連絡', desc: 'ジャックス担当者よりメールまたは電話連絡' },
+                  { id: 'STEP4_審査書類準備中', label: 'STEP 4｜審査情報・書類の準備', desc: '審査に必要な情報・書類をご案内・準備' },
+                  { id: 'クレジット審査通過（設置OK）', label: '🎉 クレジット審査通過（本体設置OK）', desc: 'テマサック本体設置の必須前提条件クリア！' }
+                ] as const;
+
+                return (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '1rem',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '0.75rem',
+                    border: '1.5px solid #cbd5e1',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.75rem'
+                  }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#0f172a' }}>
+                      🔍 PDF Page 8｜キャッシュレス審査 4 STEP（ジャックス連携）＆ 本体設置の必須前提条件
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: '0.5rem' }}>
+                      {steps.map(st => {
+                        const isCur = pm.cashlessReviewStep === st.id;
+                        return (
+                          <div
+                            key={st.id}
+                            onClick={() => {
+                              const isPass = st.id === 'クレジット審査通過（設置OK）';
+                              onUpdateProject?.(project.id, {
+                                pipelineMap: {
+                                  ...pm,
+                                  cashlessReviewStep: st.id,
+                                  creditApprovedForInstall: isPass ? true : pm.creditApprovedForInstall
+                                }
+                              });
+                              setCashlessSaveMsg(`✅ 審査ステップを「${st.label}」に更新しました`);
+                              setTimeout(() => setCashlessSaveMsg(null), 2500);
+                            }}
+                            style={{
+                              padding: '0.65rem 0.75rem',
+                              borderRadius: '0.55rem',
+                              border: isCur ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                              backgroundColor: isCur ? '#eff6ff' : '#f8fafc',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{ fontSize: '0.76rem', fontWeight: 900, color: isCur ? '#1e40af' : '#1e293b' }}>
+                              {isCur ? '● ' : '○ '}{st.label}
+                            </div>
+                            <div style={{ fontSize: '0.68rem', color: '#475569', marginTop: '0.2rem' }}>{st.desc}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{
+                      padding: '0.75rem 0.9rem',
+                      borderRadius: '0.55rem',
+                      backgroundColor: '#fff7ed',
+                      border: '1px solid #fdba74',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.6rem'
+                    }}>
+                      <div style={{ fontSize: '0.74rem', color: '#9a3412', lineHeight: 1.45 }}>
+                        <strong>① クレジット審査（濃紺バー）：本体設置の必須前提条件</strong> — 本体を設置する前提として「クレジット審査が通っていること」が必要です。<br />
+                        <strong>② 電子マネー・QR決済審査（青＋オレンジバー）：長期化に注意</strong> — 特にQR決済はクレジットより1か月以上審査に時間がかかる場合があります。
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextVal = !pm.creditApprovedForInstall;
+                            onUpdateProject?.(project.id, {
+                              pipelineMap: {
+                                ...pm,
+                                creditApprovedForInstall: nextVal,
+                                cashlessReviewStep: nextVal ? 'クレジット審査通過（設置OK）' : pm.cashlessReviewStep
+                              }
+                            });
+                            setCashlessSaveMsg(nextVal ? '✅ クレジット審査通過（本体設置OK）を記録しました' : 'クレジット審査通過チェックを解除しました');
+                            setTimeout(() => setCashlessSaveMsg(null), 2500);
+                          }}
+                          style={{
+                            padding: '0.32rem 0.7rem',
+                            borderRadius: '0.45rem',
+                            border: pm.creditApprovedForInstall ? '2px solid #059669' : '1px solid #cbd5e1',
+                            backgroundColor: pm.creditApprovedForInstall ? '#059669' : '#ffffff',
+                            color: pm.creditApprovedForInstall ? '#ffffff' : '#334155',
+                            fontSize: '0.74rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {pm.creditApprovedForInstall ? '✓ ① クレジット審査通過済（本体設置OK）' : '☐ ① クレジット審査通過にする'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextVal = !pm.qrEmoneyApproved;
+                            onUpdateProject?.(project.id, {
+                              pipelineMap: {
+                                ...pm,
+                                qrEmoneyApproved: nextVal
+                              }
+                            });
+                            setCashlessSaveMsg(nextVal ? '✅ ② 電子マネー・QR審査完了を記録しました' : '電子マネー・QR審査完了チェックを解除しました');
+                            setTimeout(() => setCashlessSaveMsg(null), 2500);
+                          }}
+                          style={{
+                            padding: '0.32rem 0.7rem',
+                            borderRadius: '0.45rem',
+                            border: pm.qrEmoneyApproved ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                            backgroundColor: pm.qrEmoneyApproved ? '#2563eb' : '#ffffff',
+                            color: pm.qrEmoneyApproved ? '#ffffff' : '#334155',
+                            fontSize: '0.74rem',
+                            fontWeight: 900,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {pm.qrEmoneyApproved ? '✓ ② 電マネ・QR審査も完了' : '☐ ② 電マネ・QR審査完了にする'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2226,24 +3447,205 @@ ${(project.activities || []).map(a => {
           )}
 
           {activeTab === 'installation' && (
-            <div className="drawer-section">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0 }}>現地写真</h3>
-              </div>
+            <div className="drawer-section" style={{ backgroundColor: '#f8fafc', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {(() => {
+                const pm = project.pipelineMap || {};
+                const gate = getProjectSpecAndGateSummary(project);
+                const saveSurvey = (updates: Partial<PipelineMap>, msg?: string) => {
+                  onUpdateProject?.(project.id, {
+                    pipelineMap: {
+                      ...pm,
+                      ...updates
+                    }
+                  });
+                  if (msg) {
+                    setCashlessSaveMsg(msg);
+                    setTimeout(() => setCashlessSaveMsg(null), 2500);
+                  }
+                };
 
-              {project.photos && project.photos.length > 0 ? (
-                <div className="photo-grid">
-                  {project.photos.map(photo => (
-                    <div key={photo.id} className="photo-item">
-                      <img src={photo.url} alt={photo.type} />
-                      <div className="photo-caption">{photo.type}</div>
-                      {photo.comment && <div className="photo-comment">{photo.comment}</div>}
+                return (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <h3 style={{ margin: 0, color: '#0f172a' }}>
+                          🔌 ④ 現地調査《弊社担当者》5つの確認チェックリスト（PDF Page 9 完全準拠）
+                        </h3>
+                        <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '0.2rem' }}>
+                          現地調査では診療の妨げにならないよう配慮し、設置スペース・電源・LAN・IPアドレス・プロバイダ書類を確認します。
+                        </div>
+                      </div>
+                      <span style={{
+                        padding: '0.3rem 0.75rem',
+                        borderRadius: '999px',
+                        backgroundColor: gate.surveyReadyCount === 5 ? '#059669' : '#1e40af',
+                        color: '#ffffff',
+                        fontSize: '0.78rem',
+                        fontWeight: 900
+                      }}>
+                        現地調査確認: {gate.surveyReadyCount} / 5 項目完了
+                      </span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>登録されている写真はありません。</div>
-              )}
+
+                    {cashlessSaveMsg && (
+                      <div style={{
+                        padding: '0.5rem 0.85rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#ecfdf5',
+                        border: '1px solid #6ee7b7',
+                        color: '#065f46',
+                        fontSize: '0.78rem',
+                        fontWeight: 800
+                      }}>
+                        {cashlessSaveMsg}
+                      </div>
+                    )}
+
+                    {/* 現地調査日・設置工事日・電源LAN増設工事 */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>📅 ④ 現地調査 訪問日:</label>
+                        <input
+                          type="date"
+                          className="mock-input"
+                          defaultValue={project.surveyDate || ''}
+                          onBlur={e => {
+                            onUpdateProject?.(project.id, { surveyDate: e.target.value });
+                            setCashlessSaveMsg('✅ 現地調査訪問日を保存しました');
+                            setTimeout(() => setCashlessSaveMsg(null), 2500);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>🚚 本体搬入・設置予定日:</label>
+                        <input
+                          type="date"
+                          className="mock-input"
+                          defaultValue={project.installationDate || ''}
+                          onBlur={e => {
+                            onUpdateProject?.(project.id, { installationDate: e.target.value });
+                            setCashlessSaveMsg('✅ 本体搬入・設置予定日を保存しました');
+                            setTimeout(() => setCashlessSaveMsg(null), 2500);
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>🔌 電源・LANの事前増設工事:</label>
+                        <select
+                          className="mock-input"
+                          value={pm.powerLanConstructionNeeded || '不要（既存設備でOK）'}
+                          onChange={e => saveSurvey({ powerLanConstructionNeeded: e.target.value as PipelineMap['powerLanConstructionNeeded'], constructionCheck: true }, '✅ 電源・LAN工事区分を更新しました')}
+                        >
+                          <option value="不要（既存設備でOK）">不要（既存設備でOK）</option>
+                          <option value="要増設工事（電源・LAN手配中）">要増設工事（電源・LAN手配中）</option>
+                          <option value="増設工事完了">増設工事完了</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* PDF Page 9: 確認1〜確認5 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      {[
+                        {
+                          key: 'surveyCheck1TemasakSpace' as const,
+                          badge: '確認 1',
+                          badgeBg: '#1e293b',
+                          title: '自動精算機テマサックの設置場所の確認',
+                          desc: '設置スペース・電源・LANの位置関係を確認します。（※設置場所によっては、事前に電源・LANの増設工事をお願いする場合があります。）',
+                          urgent: false
+                        },
+                        {
+                          key: 'surveyCheck2BmposSpace' as const,
+                          badge: '確認 2',
+                          badgeBg: '#1e293b',
+                          title: 'BM-POS用PCの設置場所（主に受付内）の確認',
+                          desc: 'だいたいは受付内への設置となります。PC周辺の電源コンセントおよびLANポートの位置関係を確認します。',
+                          urgent: false
+                        },
+                        {
+                          key: 'surveyCheck3RececomIp' as const,
+                          badge: '確認 3',
+                          badgeBg: '#ea580c',
+                          title: 'レセコンなどのIPアドレスの確認【要事前準備】',
+                          desc: '連携するレセコン等のIPアドレスを確認いたします。事前に設定情報をご用意ください。',
+                          urgent: true,
+                          memoKey: 'rececomIpMemo' as const,
+                          memoPlaceholder: 'レセコンメーカー名・IPアドレス・サブネット等を記入...'
+                        },
+                        {
+                          key: 'surveyCheck4Network' as const,
+                          badge: '確認 4',
+                          badgeBg: '#2563eb',
+                          title: '院内・院外ネットワーク状況の確認',
+                          desc: '院内ネットワーク（レセコン連携）および院外ネットワーク（インターネット通信）それぞれにつながることができるかを確認します。',
+                          urgent: false
+                        },
+                        {
+                          key: 'surveyCheck5ProviderDoc' as const,
+                          badge: '確認 5',
+                          badgeBg: '#ea580c',
+                          title: 'プロバイダの申し込み内容が分かる書類の確認【要事前準備】',
+                          desc: '回線環境を正確に把握するため、プロバイダの申し込み内容が分かる書類をご用意ください。',
+                          urgent: true,
+                          memoKey: 'providerDocMemo' as const,
+                          memoPlaceholder: 'プロバイダ名・回線種別（光回線/ルーター機種等）を記入...'
+                        }
+                      ].map(item => {
+                        const checked = !!pm[item.key];
+                        return (
+                          <div
+                            key={item.key}
+                            onClick={() => saveSurvey({ [item.key]: !checked }, `✅ ${item.badge}（${item.title}）を更新しました`)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'stretch',
+                              borderRadius: '0.65rem',
+                              overflow: 'hidden',
+                              border: checked ? '2px solid #059669' : item.urgent ? '1.5px solid #fb923c' : '1px solid #cbd5e1',
+                              backgroundColor: checked ? '#ecfdf5' : item.urgent ? '#fff7ed' : '#ffffff',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <div style={{
+                              width: '76px',
+                              backgroundColor: checked ? '#059669' : item.badgeBg,
+                              color: '#ffffff',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 900,
+                              fontSize: '0.82rem',
+                              flexShrink: 0
+                            }}>
+                              <span>{item.badge}</span>
+                              <span style={{ fontSize: '0.68rem', marginTop: '0.15rem' }}>{checked ? '✓ 済' : '未確認'}</span>
+                            </div>
+                            <div style={{ padding: '0.75rem 1rem', flex: 1 }}>
+                              <div style={{ fontSize: '0.86rem', fontWeight: 900, color: checked ? '#065f46' : item.urgent ? '#c2410c' : '#0f172a' }}>
+                                {checked ? '☑ ' : '☐ '}{item.title}
+                              </div>
+                              <div style={{ fontSize: '0.74rem', color: '#475569', marginTop: '0.2rem' }}>{item.desc}</div>
+                              {item.memoKey && (
+                                <div onClick={e => e.stopPropagation()} style={{ marginTop: '0.45rem' }}>
+                                  <input
+                                    type="text"
+                                    className="mock-input"
+                                    style={{ marginTop: 0, backgroundColor: '#ffffff', fontSize: '0.76rem' }}
+                                    placeholder={item.memoPlaceholder}
+                                    defaultValue={pm[item.memoKey] || ''}
+                                    onBlur={e => saveSurvey({ [item.memoKey!]: e.target.value }, '✅ 現地調査メモを保存しました')}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
