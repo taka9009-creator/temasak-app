@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid';
 import { addDays, format } from 'date-fns';
+import { getClinicTotalPoints } from '../types';
 import type { Project, NextAction, Activity } from '../types';
+import recoveredRosterData from './recovered_user_roster42.json';
 
 export interface RosterRawRecord {
   serialNo: number;          // 通し番号 (4580〜5177)
@@ -107,9 +109,25 @@ export function inferLeadTag(rawName: string): { cleanName: string; tag: string;
 }
 
 /**
- * 42件の名簿データを「案件(Project)」と「次アクション(NextAction)」へ一括変換
+ * 過去に入力された活動履歴・失注リスト(5件)・基本情報(電話番号/院長名/診療時間/休診日/URL/予約システム)を含む全42件名簿データを返す
  */
 export function buildRoster42Dataset(): { projects: Project[]; actions: NextAction[] } {
+  const recoveredProjects = (recoveredRosterData as any).projects as Project[];
+  const recoveredActions = (recoveredRosterData as any).actions as NextAction[];
+
+  if (Array.isArray(recoveredProjects) && recoveredProjects.length >= 42) {
+    const normalizedProjects: Project[] = recoveredProjects.map(p => ({
+      ...p,
+      clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : getClinicTotalPoints(p),
+      activities: Array.isArray(p.activities) ? p.activities : []
+    }));
+    normalizedProjects.sort((a, b) => (b.receivedAt || '').localeCompare(a.receivedAt || ''));
+    return {
+      projects: normalizedProjects,
+      actions: Array.isArray(recoveredActions) ? recoveredActions : []
+    };
+  }
+
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const projects: Project[] = [];
   const actions: NextAction[] = [];

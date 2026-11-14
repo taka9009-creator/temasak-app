@@ -38,8 +38,6 @@ import {
   type RuleTargetSegment
 } from '../context/RuleContext';
 import { useProjects } from '../context/ProjectContext';
-import { useAuth } from '../context/AuthContext';
-import { generateFieldTestSamples } from '../utils/sampleDataGenerator';
 import { scanMatchingProjectsForRule } from '../utils/actionRules';
 import { SALES_PROGRESS_FLOW } from '../types';
 
@@ -70,9 +68,7 @@ export default function Settings() {
   const { settings: notifSettings, updateSettings } = useNotifications();
   const [aiSettings, setAiSettings] = useState<AISettings>(getAISettings);
   const { rules, toggleRule, deleteRule, addRule, updateRule, resetToEasyOSDefaultRules } = useRules();
-  const { projects, addProject, applyRuleToMatchingProjects, syncLocalToCloud, isCloudSyncing, resetToRoster42 } = useProjects();
-  const { user } = useAuth();
-  const [isInjectingSamples, setIsInjectingSamples] = useState(false);
+  const { projects, applyRuleToMatchingProjects, syncLocalToCloud, isCloudSyncing, resetToRoster42 } = useProjects();
   const [isAddingRule, setIsAddingRule] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
   const [selectedRuleCategory, setSelectedRuleCategory] = useState<string>('all');
@@ -284,7 +280,7 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
               }}
             >
               <option value="action_recorded">⚡ アクションボタン実行時（超かんたん司令室）</option>
-              <option value="status_changed">🔄 7段階 進捗フロー変更時</option>
+              <option value="status_changed">🔄 8段階 進捗フロー変更時（カンバン連動）</option>
               <option value="points_reached">🏆 クリニック/BtoB 累計ポイント到達時</option>
               <option value="stagnant_days">⏰ 最終活動から停滞・放置日数経過時</option>
               <option value="lost_archived">🗄️ アーカイブ（失注理由）移動時</option>
@@ -310,6 +306,7 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
                 <option value="ポスティング">📮 ポスティング (+2p)</option>
                 <option value="相談メール">📨 相談メール (+3p)</option>
                 <option value="後追いメール">📮 後追いメール (+2p)</option>
+                <option value="kz送客">💰 kz送客・補助金コンサル送客 (+5p)</option>
                 <option value="受注">🎉 受注 (+10p)</option>
               </select>
             )}
@@ -1084,94 +1081,38 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
           現在のブラウザにある全{projects.length}件の名簿データ・活動履歴・獲得ポイント・次回ToDoをクラウド（Firestore）にバックアップ・同期します。<br />
           同期が完了すると、<strong>別のパソコン・スマホ・タブレットからログインした際も、まったく同じ最新データがリアルタイムで統合・表示</strong>されます。
         </p>
-        <button
-          className="btn btn-primary"
-          disabled={isCloudSyncing}
-          onClick={async () => {
-            if (window.confirm(`現在ローカルにある全${projects.length}件の案件とToDoをクラウドに一括同期しますか？\n（他のパソコンやスマホからも同じデータが見られるようになります）`)) {
-              const res = await syncLocalToCloud();
-              if (res.success) {
-                alert(`✅ 成功: ${res.count}件の案件データをクラウドに同期しました！他の端末からも確認できます。`);
-              } else {
-                alert(`⚠️ エラー: ${res.error}`);
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary"
+            disabled={isCloudSyncing}
+            onClick={async () => {
+              if (window.confirm(`現在ローカルにある全${projects.length}件の案件とToDoをクラウドに一括同期しますか？\n（他のパソコンやスマホからも同じデータが見られるようになります）`)) {
+                const res = await syncLocalToCloud();
+                if (res.success) {
+                  alert(`✅ 成功: ${res.count}件の案件データをクラウドに同期しました！他の端末からも確認できます。`);
+                } else {
+                  alert(`⚠️ エラー: ${res.error}`);
+                }
               }
-            }
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}
-        >
-          {isCloudSyncing ? 'クラウド同期中...' : `☁️ 現在の${projects.length}件をクラウドに一括同期・統合する`}
-        </button>
+            }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800, padding: '0.6rem 1.2rem', fontSize: '0.9rem' }}
+          >
+            {isCloudSyncing ? 'クラウド同期中...' : `☁️ 現在の${projects.length}件をクラウドに一括同期・統合する`}
+          </button>
 
-        {projects.length !== 42 && (
           <button
             className="btn btn-outline"
             onClick={() => {
-              if (window.confirm('標準の42件名簿データ（北海道・東北クリニック＆ディーラー）を読み込み直してリセットしますか？')) {
+              if (window.confirm('名簿初期の42件（北海道・東北クリニック＆ディーラー）の状態に初期化し、クラウドにも反映しますか？')) {
                 resetToRoster42();
-                alert('🔄 42件名簿データを再読み込みしました。「現在の42件をクラウドに一括同期・統合する」を押してクラウドに反映させてください。');
+                alert('🔄 名簿初期の42件データを再読み込みし、クラウドへ反映しました。');
               }
             }}
-            style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, borderColor: '#2563eb', color: '#1d4ed8' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, borderColor: '#2563eb', color: '#1d4ed8', backgroundColor: '#ffffff' }}
           >
-            <RotateCcw size={15} /> 📋 42件の名簿初期データを再読み込みする
+            <RotateCcw size={15} /> 📋 名簿初期の42件から始める（初期状態へリセット）
           </button>
-        )}
-      </div>
-
-      {/* 現場テスト用サンプルデータ投入 */}
-      <div className="card" style={{ marginTop: '2rem', border: '1px solid rgba(79, 70, 229, 0.3)', backgroundColor: '#f5f3ff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-          <Sparkles size={20} color="var(--primary)" />
-          <h3 style={{ fontSize: '1rem', color: 'var(--primary)', margin: 0, fontWeight: 700 }}>
-            現場テスト用サンプルデータの一括投入
-          </h3>
         </div>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-          「さくら内科クリニック（本日対応）」「中央整形外科（期限切れアラート）」「ひまわり小児科（明日デモ）」「緑が丘眼科（現調調整中）」のリアルな案件とToDoを一括投入し、現場での使い勝手をすぐに検証できます。
-        </p>
-        <button
-          className="btn btn-primary"
-          disabled={isInjectingSamples}
-          onClick={async () => {
-            if (window.confirm('現場テスト用のサンプル案件・ToDo（4件）を一括投入しますか？')) {
-              setIsInjectingSamples(true);
-              try {
-                const samples = generateFieldTestSamples(user?.name || '松浦 貴文');
-                for (let i = 0; i < samples.projects.length; i++) {
-                  await addProject(samples.projects[i], samples.actions[i]);
-                }
-                alert('現場テスト用データを投入しました！ダッシュボードや案件管理でご確認ください。');
-              } catch (e) {
-                console.error(e);
-                alert('投入中にエラーが発生しました。');
-              } finally {
-                setIsInjectingSamples(false);
-              }
-            }
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}
-        >
-          <Sparkles size={16} /> {isInjectingSamples ? '投入中...' : '現場テスト用サンプルデータ（4件）を投入する'}
-        </button>
-      </div>
-
-      <div className="card" style={{ marginTop: '1.5rem', border: '1px solid var(--danger)', backgroundColor: '#fef2f2' }}>
-        <h3 style={{ fontSize: '1rem', color: 'var(--danger)', marginBottom: '0.5rem', marginTop: 0 }}>データの初期化（リセット）</h3>
-        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-          以前のデモデータ（山田太郎など）が残っていて画面がおかしい場合、すべてのデータをクリアして最新の初期データを読み込み直します。
-        </p>
-        <button
-          className="btn btn-primary"
-          style={{ backgroundColor: 'var(--danger)', borderColor: 'var(--danger)', color: 'white' }}
-          onClick={() => {
-            if (window.confirm('本当にデータを初期化してよろしいですか？（ブラウザに保存されている案件データはすべて消去されます）')) {
-              localStorage.clear();
-              window.location.reload();
-            }
-          }}
-        >
-          <Trash2 size={16} /> デモデータをリセットする
-        </button>
       </div>
     </div>
   );

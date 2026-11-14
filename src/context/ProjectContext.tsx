@@ -1,12 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { db } from '../lib/firebase';
-import { 
-  collection, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  query, 
-  where, 
+import {
+  collection,
+  doc,
+  setDoc,
+  deleteDoc,
+  query,
   onSnapshot
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,15 +19,23 @@ import {
   createActionFromGlobalRule
 } from '../utils/actionRules';
 import { buildRoster42Dataset } from '../utils/roster42Data';
-import { ACTION_POINT_RULES, getClinicTotalPoints } from '../types';
+import { ACTION_POINT_RULES, getClinicTotalPoints, normalizeProgressStage } from '../types';
 import type { Project, NextAction, ProjectStatus, ActionPriority, Activity, QuickCallOutcome, LostReasonType } from '../types';
 import { useWorkflow } from './WorkflowContext';
 import { useRules } from './RuleContext';
 import type { GlobalRule } from './RuleContext';
 import { useAuth } from './AuthContext';
 
-const LOCAL_PROJECTS_KEY = 'temasak_os_projects_v2';
-const LOCAL_ACTIONS_KEY = 'temasak_os_actions_v2';
+// 本番始動用ストレージキー（復元済みの活動履歴・失注5件・基本情報を反映）
+const LOCAL_PROJECTS_KEY = 'temasak_os_projects_recovered_v2';
+const LOCAL_ACTIONS_KEY = 'temasak_os_actions_recovered_v2';
+const CLOUD_RECOVERED_FLAG = 'temasak_cloud_recovered_v2';
+
+// 本番有効な案件IDかどうかの判定（旧サンプル12件やテスト用UUIDを除外）
+function isValidProductionProjectId(id: string | undefined): boolean {
+  if (!id) return false;
+  return id.startsWith('roster-') || id.startsWith('paste-proj-') || id.startsWith('prod-');
+}
 
 interface ProjectContextType {
   projects: Project[];
@@ -66,7 +73,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(LOCAL_PROJECTS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const validOnly = parsed.filter((p: Project) => isValidProductionProjectId(p?.id));
+          if (validOnly.length >= 42) return validOnly;
+        }
       }
     } catch (e) {
       console.error('Failed to load local projects:', e);
@@ -79,7 +89,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(LOCAL_ACTIONS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          const validOnly = parsed.filter((a: NextAction) => isValidProductionProjectId(a?.projectId));
+          if (validOnly.length > 0) return validOnly;
+        }
       }
     } catch (e) {
       console.error('Failed to load local actions:', e);
@@ -109,135 +122,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, [actions]);
 
-  // Firestore listener (if real Firebase user is connected and has data)
-  useEffect(() => {
-    if (!user || user.id === 'demo-user-1') {
-      return;
-    }
-
-    const projectsQuery = query(collection(db, 'projects'));
-    const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
-      // クラウドにデータがある場合はそれを反映
-      if (!snapshot.empty) {
-        const loadedProjects: Project[] = snapshot.docs.map(docSnap => {
-          const p = docSnap.data();
-          return {
-            id: docSnap.id,
-            clinicName: p.clinicName || p.clinic_name || '',
-            clinicType: p.clinicType || p.clinic_type || '',
-            address: p.address || '',
-            phone: p.phone || '',
-            email: p.email || '',
-            contactPerson: p.contactPerson || p.contact_person || '',
-            contactTitle: p.contactTitle || p.contact_title || '',
-            source: p.source || '',
-            sourceDetail: p.sourceDetail,
-            receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
-            product: p.product || 'テマサック自動精算機',
-            quantity: p.quantity || 1,
-            priority: (p.priority as ActionPriority) || '中',
-            status: p.status || '新規',
-            salesRep: p.salesRep || p.sales_rep || '松浦 貴文',
-            ballHolder: p.ballHolder || p.ball_holder || '松浦 貴文',
-            lastActivityAt: p.lastActivityAt || p.last_activity_at || p.created_at || new Date().toISOString(),
-            probability: p.probability as any,
-            memo: p.memo || '',
-            lostReason: p.lostReason || p.lost_reason,
-            isImplementationProject: !!(p.isImplementationProject ?? p.is_implementation_project),
-            pipelineMap: p.pipelineMap || {
-              deviceType: p.device_type,
-              bodyColor: p.body_color,
-              subsidyName: p.subsidy_name,
-              creditStatus: p.credit_status,
-              emoneyStatus: p.emoney_status,
-              qrStatus: p.qr_status,
-            },
-            clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
-            initialEmailDate: p.initialEmailDate,
-            estimateSentDate: p.estimateSentDate,
-            demoType: p.demoType,
-            demoDate: p.demoDate,
-            visitDate: p.visitDate,
-            postingDate: p.postingDate,
-            consultEmailDate: p.consultEmailDate,
-            followupEmailDate: p.followupEmailDate,
-            orderDate: p.orderDate,
-            clinicHours: p.clinicHours,
-            closedDays: p.closedDays,
-            websiteUrl: p.websiteUrl,
-            reservationSystem: p.reservationSystem,
-            activities: Array.isArray(p.activities) ? p.activities : [],
-            installationDate: p.installationDate || p.installation_date,
-            createdAt: p.createdAt || p.created_at || new Date().toISOString(),
-            updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
-          };
-        });
-        setProjects(loadedProjects);
-      } else {
-        // クラウドがまだ空の場合、ローカルにデータがあれば自動で初回同期する
-        setProjects(prev => {
-          if (prev.length > 0) {
-            // クラウドに既存データを一括自動保存
-            prev.forEach(item => saveProjectToFirestore(item));
-          } else {
-            const fresh = buildRoster42Dataset();
-            fresh.projects.forEach(item => saveProjectToFirestore(item));
-            return fresh.projects;
-          }
-          return prev;
-        });
-      }
-    }, (error) => {
-      console.error('Firestore projects error:', error);
-    });
-
-    const actionsQuery = query(collection(db, 'actions'));
-    const unsubscribeActions = onSnapshot(actionsQuery, (snapshot) => {
-      if (!snapshot.empty) {
-        const loadedActions: NextAction[] = snapshot.docs.map(docSnap => {
-          const a = docSnap.data();
-          return {
-            id: docSnap.id,
-            projectId: a.projectId || a.project_id || '',
-            title: a.title || '',
-            status: a.status || '未完了',
-            deadline: a.deadline || '',
-            assignee: a.assignee || '',
-            priority: a.priority || '中',
-            memo: a.memo || '',
-            completedAt: a.completedAt || a.completed_at,
-            createdAt: a.createdAt || a.created_at || new Date().toISOString()
-          };
-        });
-        setActions(loadedActions);
-      } else {
-        setActions(prev => {
-          if (prev.length > 0) {
-            prev.forEach(item => saveActionToFirestore(item));
-          } else {
-            const fresh = buildRoster42Dataset();
-            fresh.actions.forEach(item => saveActionToFirestore(item));
-            return fresh.actions;
-          }
-          return prev;
-        });
-      }
-    }, (error) => {
-      console.error('Firestore actions error:', error);
-    });
-
-    return () => {
-      unsubscribeProjects();
-      unsubscribeActions();
-    };
-  }, [user]);
-
   const saveProjectToFirestore = async (proj: Project) => {
     if (!user || user.id === 'demo-user-1') return;
+    if (!isValidProductionProjectId(proj.id)) return;
     try {
       const projectRef = doc(db, 'projects', proj.id);
       const cleanProject: Record<string, any> = { ...proj, user_id: user.id };
-      // undefined を除去
       Object.keys(cleanProject).forEach(k => {
         if (cleanProject[k] === undefined) delete cleanProject[k];
       });
@@ -249,6 +139,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const saveActionToFirestore = async (act: NextAction) => {
     if (!user || user.id === 'demo-user-1') return;
+    if (!isValidProductionProjectId(act.projectId)) return;
     try {
       const actRef = doc(db, 'actions', act.id);
       const cleanAct: Record<string, any> = { ...act, user_id: user.id };
@@ -261,8 +152,203 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Firestore listener: 旧サンプルデータを自動削除し、名簿初期42件＋本番追加案件のみをリアルタイム同期
+  useEffect(() => {
+    if (!user || user.id === 'demo-user-1') {
+      return;
+    }
+
+    const projectsQuery = query(collection(db, 'projects'));
+    const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
+      // 1. 旧サンプル案件（IDが roster- / paste-proj- / prod- 以外）をFirestoreから自動削除
+      const validDocs = snapshot.docs.filter(docSnap => {
+        if (!isValidProductionProjectId(docSnap.id)) {
+          deleteDoc(doc(db, 'projects', docSnap.id)).catch(err =>
+            console.error('Failed to purge sample project:', err)
+          );
+          return false;
+        }
+        return true;
+      });
+
+      const loadedMap = new Map<string, Project>();
+      validDocs.forEach(docSnap => {
+        const p = docSnap.data();
+        loadedMap.set(docSnap.id, {
+          id: docSnap.id,
+          clinicName: p.clinicName || p.clinic_name || '',
+          clinicType: p.clinicType || p.clinic_type || '',
+          address: p.address || '',
+          phone: p.phone || '',
+          email: p.email || '',
+          contactPerson: p.contactPerson || p.contact_person || '',
+          contactTitle: p.contactTitle || p.contact_title || '',
+          source: p.source || '',
+          sourceDetail: p.sourceDetail,
+          receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
+          product: p.product || 'テマサック自動精算機',
+          quantity: p.quantity || 1,
+          priority: (p.priority as ActionPriority) || '中',
+          status: p.status || '初動',
+          salesRep: p.salesRep || p.sales_rep || '松浦 貴文',
+          ballHolder: p.ballHolder || p.ball_holder || '松浦 貴文',
+          lastActivityAt: p.lastActivityAt || p.last_activity_at || p.created_at || new Date().toISOString(),
+          probability: p.probability as any,
+          memo: p.memo || '',
+          lostReason: p.lostReason || p.lost_reason,
+          isImplementationProject: !!(p.isImplementationProject ?? p.is_implementation_project),
+          pipelineMap: p.pipelineMap || {
+            deviceType: p.device_type,
+            bodyColor: p.body_color,
+            subsidyName: p.subsidy_name,
+            creditStatus: p.credit_status,
+            emoneyStatus: p.emoney_status,
+            qrStatus: p.qr_status,
+          },
+          clinicPoints: typeof p.clinicPoints === 'number' ? p.clinicPoints : p.clinic_points,
+          initialEmailDate: p.initialEmailDate,
+          estimateSentDate: p.estimateSentDate,
+          demoType: p.demoType,
+          demoDate: p.demoDate,
+          visitDate: p.visitDate,
+          postingDate: p.postingDate,
+          consultEmailDate: p.consultEmailDate,
+          followupEmailDate: p.followupEmailDate,
+          kzReferralDate: p.kzReferralDate,
+          orderDate: p.orderDate,
+          clinicHours: p.clinicHours,
+          closedDays: p.closedDays,
+          websiteUrl: p.websiteUrl,
+          reservationSystem: p.reservationSystem,
+          aiSummary: p.aiSummary,
+          aiRecommendation: p.aiRecommendation,
+          activities: Array.isArray(p.activities) ? p.activities : [],
+          installationDate: p.installationDate || p.installation_date,
+          createdAt: p.createdAt || p.created_at || new Date().toISOString(),
+          updatedAt: p.updatedAt || p.updated_at || new Date().toISOString(),
+        });
+      });
+
+      // 2. 過去に入力された活動履歴・失注リスト(5件)・基本情報(電話番号/診療時間/休診日/URL/予約システム/院長名)を自動復元・補完してクラウドへ保存
+      const freshRoster = buildRoster42Dataset().projects;
+      const isFirstRecoverySync = localStorage.getItem(CLOUD_RECOVERED_FLAG) !== 'done';
+
+      freshRoster.forEach(rosterProj => {
+        const existing = loadedMap.get(rosterProj.id);
+        if (!existing) {
+          loadedMap.set(rosterProj.id, rosterProj);
+          saveProjectToFirestore(rosterProj);
+        } else {
+          const needsRecovery =
+            isFirstRecoverySync ||
+            (!existing.phone && !!rosterProj.phone) ||
+            (!existing.clinicHours && !!rosterProj.clinicHours) ||
+            (!existing.websiteUrl && !!rosterProj.websiteUrl) ||
+            ((existing.activities?.length || 0) < (rosterProj.activities?.length || 0));
+
+          if (needsRecovery) {
+            const mergedProj: Project = {
+              ...rosterProj,
+              ...existing,
+              clinicType: rosterProj.clinicType || existing.clinicType,
+              address: (rosterProj.address && rosterProj.address.length > (existing.address?.length || 0))
+                ? rosterProj.address
+                : (existing.address || rosterProj.address),
+              phone: existing.phone || rosterProj.phone || '',
+              clinicHours: existing.clinicHours || rosterProj.clinicHours,
+              closedDays: existing.closedDays || rosterProj.closedDays,
+              websiteUrl: existing.websiteUrl || rosterProj.websiteUrl,
+              reservationSystem: existing.reservationSystem || rosterProj.reservationSystem,
+              status: isFirstRecoverySync ? rosterProj.status : existing.status,
+              lostReason: isFirstRecoverySync ? rosterProj.lostReason : (existing.lostReason || rosterProj.lostReason),
+              probability: isFirstRecoverySync ? rosterProj.probability : existing.probability,
+              memo: isFirstRecoverySync ? rosterProj.memo : existing.memo,
+              demoType: existing.demoType || rosterProj.demoType,
+              demoDate: existing.demoDate || rosterProj.demoDate,
+              initialEmailDate: existing.initialEmailDate || rosterProj.initialEmailDate,
+              estimateSentDate: existing.estimateSentDate || rosterProj.estimateSentDate,
+              clinicPoints: Math.max(existing.clinicPoints || 0, rosterProj.clinicPoints || 0),
+              pipelineMap: {
+                ...(rosterProj.pipelineMap || {}),
+                ...(existing.pipelineMap || {}),
+                director: existing.pipelineMap?.director || rosterProj.pipelineMap?.director
+              },
+              activities:
+                (existing.activities?.length || 0) >= (rosterProj.activities?.length || 0)
+                  ? existing.activities
+                  : rosterProj.activities
+            };
+            loadedMap.set(rosterProj.id, mergedProj);
+            saveProjectToFirestore(mergedProj);
+          }
+        }
+      });
+
+      if (isFirstRecoverySync) {
+        localStorage.setItem(CLOUD_RECOVERED_FLAG, 'done');
+      }
+
+      const mergedList = Array.from(loadedMap.values()).sort((a, b) =>
+        (b.receivedAt || '').localeCompare(a.receivedAt || '')
+      );
+      setProjects(mergedList);
+    }, (error) => {
+      console.error('Firestore projects error:', error);
+    });
+
+    const actionsQuery = query(collection(db, 'actions'));
+    const unsubscribeActions = onSnapshot(actionsQuery, (snapshot) => {
+      // 旧サンプルタスク（△△医院など）をFirestoreから自動削除
+      const validActionDocs = snapshot.docs.filter(docSnap => {
+        const a = docSnap.data();
+        const pid = a.projectId || a.project_id || '';
+        if (!isValidProductionProjectId(pid)) {
+          deleteDoc(doc(db, 'actions', docSnap.id)).catch(err =>
+            console.error('Failed to purge sample action:', err)
+          );
+          return false;
+        }
+        return true;
+      });
+
+      const loadedActionMap = new Map<string, NextAction>();
+      validActionDocs.forEach(docSnap => {
+        const a = docSnap.data();
+        loadedActionMap.set(docSnap.id, {
+          id: docSnap.id,
+          projectId: a.projectId || a.project_id || '',
+          title: a.title || '',
+          status: a.status || '未完了',
+          deadline: a.deadline || '',
+          assignee: a.assignee || '',
+          priority: a.priority || '中',
+          memo: a.memo || '',
+          completedAt: a.completedAt || a.completed_at,
+          createdAt: a.createdAt || a.created_at || new Date().toISOString()
+        });
+      });
+
+      const freshActions = buildRoster42Dataset().actions;
+      freshActions.forEach(rosterAct => {
+        if (!loadedActionMap.has(rosterAct.id)) {
+          loadedActionMap.set(rosterAct.id, rosterAct);
+          saveActionToFirestore(rosterAct);
+        }
+      });
+
+      setActions(Array.from(loadedActionMap.values()));
+    }, (error) => {
+      console.error('Firestore actions error:', error);
+    });
+
+    return () => {
+      unsubscribeProjects();
+      unsubscribeActions();
+    };
+  }, [user]);
+
   /**
-   * 現在のブラウザ内の全42件名簿・活動履歴・アクションを一括でFirestoreクラウドへアップロード
+   * 現在のブラウザ内の全案件・活動履歴・アクションを一括でFirestoreクラウドへアップロード
    */
   const syncLocalToCloud = async (): Promise<{ success: boolean; count: number; error?: string }> => {
     if (!user || user.id === 'demo-user-1') {
@@ -272,11 +358,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     try {
       let count = 0;
       for (const p of projects) {
-        await saveProjectToFirestore(p);
-        count++;
+        if (isValidProductionProjectId(p.id)) {
+          await saveProjectToFirestore(p);
+          count++;
+        }
       }
       for (const a of actions) {
-        await saveActionToFirestore(a);
+        if (isValidProductionProjectId(a.projectId)) {
+          await saveActionToFirestore(a);
+        }
       }
       return { success: true, count };
     } catch (err: any) {
@@ -287,16 +377,24 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * 名簿初期42件のデータ状態に完全初期化（ローカル＋Firestoreクラウド両方）
+   */
   const resetToRoster42 = () => {
     const fresh = buildRoster42Dataset();
     setProjects(fresh.projects);
     setActions(fresh.actions);
     localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(fresh.projects));
     localStorage.setItem(LOCAL_ACTIONS_KEY, JSON.stringify(fresh.actions));
+
+    if (user && user.id !== 'demo-user-1') {
+      fresh.projects.forEach(p => saveProjectToFirestore(p));
+      fresh.actions.forEach(a => saveActionToFirestore(a));
+    }
   };
 
   /**
-   * 選択形式（他社導入・金銭面・その他）でアーカイブ（失注）へ移動
+   * 選択形式（他社導入・金銭面・その他）でアーカイブ（失注）へ移動（Firestore即時保存対応）
    */
   const archiveProjectAsLost = (
     projectId: string,
@@ -324,7 +422,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           ? p.memo.replace(/失注理由:\s*[^|]+/, `${reasonTag} `)
           : `${p.memo || ''} | ${reasonTag}`;
 
-        return {
+        const updatedTarget: Project = {
           ...p,
           status: '失注',
           lostReason: note ? `${lostReason}（${note}）` : lostReason,
@@ -333,15 +431,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           updatedAt: nowIso,
           activities: [newActivity, ...(p.activities || [])]
         };
+
+        saveProjectToFirestore(updatedTarget);
+        return updatedTarget;
       })
     );
 
     setActions(prev => {
-      const markedDone = prev.map(a =>
-        a.projectId === projectId && a.status === '未完了'
-          ? { ...a, status: '完了' as const, completedAt: nowIso }
-          : a
-      );
+      const markedDone = prev.map(a => {
+        if (a.projectId === projectId && a.status === '未完了') {
+          const doneAct = { ...a, status: '完了' as const, completedAt: nowIso };
+          saveActionToFirestore(doneAct);
+          return doneAct;
+        }
+        return a;
+      });
 
       const followupAction: NextAction = {
         id: uuidv4(),
@@ -355,12 +459,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdAt: todayStr
       };
 
+      saveActionToFirestore(followupAction);
       return [followupAction, ...markedDone];
     });
   };
 
   /**
-   * アーカイブ（失注）から営業リストへ復元
+   * アーカイブ（失注）から営業リストへ復元（Firestore即時保存対応）
    */
   const restoreArchivedProject = (projectId: string) => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -380,7 +485,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
         const cleanedMemo = (p.memo || '').replace(/\s*\|\s*失注理由:[^|]*/g, '');
 
-        return {
+        const restoredTarget: Project = {
           ...p,
           status: '初動',
           lostReason: undefined,
@@ -389,16 +494,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           updatedAt: nowIso,
           activities: [newActivity, ...(p.activities || [])]
         };
+
+        saveProjectToFirestore({
+          ...restoredTarget,
+          lostReason: '' as any
+        });
+        return restoredTarget;
       })
     );
   };
 
   /**
    * ワンクリック架電・アクション記録（クリニック別ポイント制 ＆ 7段階進捗フロー連動対応）
-   * 進捗フロー: 問合せ → 初動 → デモ → 見積 → 検討 → 後追い → 受注
-   * 架電: 会話(+3p)・不在(+1p)・折返待ち(+1p)
-   * アクション: 初動メール(+5p)・見積書送付(+5p)・オンラインデモ(+5p)・訪問デモ(+5p)・来社デモ(+5p)
-   * 追加アクション: 訪問(+3p)・ポスティング(+2p)・相談メール(+3p)・後追いメール(+2p)
    */
   const recordQuickCallResult = (
     projectId: string,
@@ -430,6 +537,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         let postingDate = p.postingDate;
         let consultEmailDate = p.consultEmailDate;
         let followupEmailDate = p.followupEmailDate;
+        let kzReferralDate = p.kzReferralDate;
         let orderDate = p.orderDate;
 
         if (callOutcome === '会話') {
@@ -546,7 +654,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             updatedMemo = `${updatedMemo} | 相談メール済(${targetDate})`;
           }
         } else if (callOutcome === '後追いメール') {
-          if (p.status !== '受注') newStatus = '後追い';
+          if (p.status !== '受注' && p.status !== 'kz送客') newStatus = '後追い';
           followupEmailDate = targetDate;
           actType = '後追いメール (+2p)';
           actContent = `後追いメールを送付完了（実施日: ${targetDate} / +2p）${note ? ` - ${note}` : ''}`;
@@ -554,6 +662,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             updatedMemo = updatedMemo.replace(/後追いメール済\([^)]*\)/, `後追いメール済(${targetDate})`);
           } else {
             updatedMemo = `${updatedMemo} | 後追いメール済(${targetDate})`;
+          }
+        } else if (callOutcome === 'kz送客') {
+          if (p.status !== '受注') newStatus = 'kz送客';
+          newProb = 'A';
+          newPriority = '高';
+          kzReferralDate = targetDate;
+          actType = '💰 kz送客 (+5p)';
+          actContent = `【kz送客】補助金コンサルタント（kz）へ送客完了・採択後に受注（送客日: ${targetDate} / +5p）${note ? ` - ${note}` : ''}`;
+          if (updatedMemo.includes('kz送客済')) {
+            updatedMemo = updatedMemo.replace(/kz送客済\([^)]*\)/, `kz送客済(${targetDate})`);
+          } else {
+            updatedMemo = `${updatedMemo} | kz送客済(${targetDate})`;
           }
         } else if (callOutcome === '受注') {
           newStatus = '受注';
@@ -624,6 +744,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           postingDate,
           consultEmailDate,
           followupEmailDate,
+          kzReferralDate,
           orderDate,
           lastActivityAt: targetDate,
           updatedAt: nowIso,
@@ -634,13 +755,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       })
     );
 
-    // 既存の未完了アクションを完了にし、ルールエンジンまたはデフォルトから次の最適アクションを自動セット
+    // 既存の未完了アクションを完了にし、次の最適アクションを自動セット＋Firestore保存
     setActions(prevActions => {
-      const markedDone = prevActions.map(a =>
-        a.projectId === projectId && a.status === '未完了'
-          ? { ...a, status: '完了' as const, completedAt: nowIso }
-          : a
-      );
+      const markedDone = prevActions.map(a => {
+        if (a.projectId === projectId && a.status === '未完了') {
+          const doneAct = { ...a, status: '完了' as const, completedAt: nowIso };
+          saveActionToFirestore(doneAct);
+          return doneAct;
+        }
+        return a;
+      });
 
       const targetProject = projects.find(p => p.id === projectId);
       if (targetProject) {
@@ -653,6 +777,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           targetDate
         );
         if (ruleHit) {
+          saveActionToFirestore(ruleHit.nextAction);
           return [ruleHit.nextAction, ...markedDone];
         }
       }
@@ -713,8 +838,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         nextPriority = '高';
       } else if (callOutcome === '後追いメール') {
         nextTitle = '後追いメール後の状況確認コール ＆ 最終意思決定フォロー';
-        nextMemo = '後追いメール送付済（+2p / 進捗: 後追い）。導入判断の時期やご不明点を確認し受注へ繋げる。';
+        nextMemo = '後追いメール送付済（+2p / 進捗: 後追い）。導入判断の時期やご不明点を確認し、kz送客または受注へ繋げる。';
         nextDeadline = format(addDays(new Date(), 3), 'yyyy-MM-dd');
+        nextPriority = '高';
+      } else if (callOutcome === 'kz送客') {
+        nextTitle = '【kz送客・補助金申請中】補助金コンサル（kz）進捗確認 ＆ 採択後の「🎉受注」確定フォロー';
+        nextMemo = `補助金コンサルタント（kz）へ送客完了（送客日: ${targetDate} / +5p / 進捗: kz送客）。補助金採択後に「🎉受注 (+10p)」へ確定させる。`;
+        nextDeadline = format(addDays(new Date(), 7), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === '受注') {
         nextTitle = '【受注完了】導入準備・現地調査および設置日程の調整';
@@ -745,6 +875,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         createdAt: todayStr
       };
 
+      saveActionToFirestore(newNextAction);
       return [newNextAction, ...markedDone];
     });
   };
@@ -752,15 +883,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const handleStatusChange = async (projectId: string, newStatus: ProjectStatus) => {
     const project = projects.find(p => p.id === projectId);
     if (!project) return;
-    if (project.status === newStatus) return;
+    const currentNormalized = project.status === '失注' ? '失注' : normalizeProgressStage(project);
+    if (project.status === newStatus && currentNormalized === newStatus) return;
 
-    let updatedActions = actions;
     let nextBallHolder = project.ballHolder;
     let newActionsToInsert: NextAction[] = [];
 
     const dynamicRules = getRulesForStatus(newStatus);
     const enterRules = dynamicRules.filter(r => r.trigger === '進入時');
-    
+
     if (enterRules.length > 0) {
       const dynamicActions = enterRules.map(r => createDynamicAction(project, r));
       newActionsToInsert = [...newActionsToInsert, ...dynamicActions];
@@ -789,38 +920,67 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       newActionsToInsert = [...newActionsToInsert, followupAction];
     }
 
-    updatedActions = [...newActionsToInsert, ...updatedActions];
-    
     const newColumn = kanbanColumns.find(c => c.id === newStatus);
     const newIsImplementation = newColumn?.phase === 'implementation' ? true : project.isImplementationProject;
     const todayStr = format(new Date(), 'yyyy-MM-dd');
     const nowIso = new Date().toISOString();
 
-    if (user && user.id !== 'demo-user-1') {
-      try {
-        const projectRef = doc(db, 'projects', project.id);
-        await updateDoc(projectRef, { 
-          status: newStatus,
-          ball_holder: nextBallHolder,
-          is_implementation_project: newIsImplementation,
-          last_activity_at: nowIso,
-          updated_at: nowIso
-        });
-      } catch (e: any) {
-        console.error('Error updating project status in Firestore:', e);
-      }
+    if (newStatus === 'kz送客' && newActionsToInsert.length === 0) {
+      const kzAction: NextAction = {
+        id: uuidv4(),
+        projectId: project.id,
+        title: '【kz送客・補助金申請中】補助金コンサル（kz）進捗確認 ＆ 採択後の「🎉受注」確定フォロー',
+        assignee: project.salesRep || '松浦 貴文',
+        deadline: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
+        priority: '高',
+        status: '未完了',
+        memo: '進捗フロー「kz送客（補助金コンサルタント送客済・採択後に受注）」へ移行。採択結果を確認し次第、受注へ進める。',
+        createdAt: todayStr
+      };
+      newActionsToInsert = [kzAction, ...newActionsToInsert];
     }
 
-    setActions(updatedActions);
-    setProjects(projects.map(p => 
-      p.id === project.id ? { 
-        ...p, 
-        status: newStatus, 
-        ballHolder: nextBallHolder, 
-        isImplementationProject: newIsImplementation,
-        lastActivityAt: todayStr 
-      } : p
-    ));
+    newActionsToInsert.forEach(a => saveActionToFirestore(a));
+
+    setActions(prev => [...newActionsToInsert, ...prev]);
+    setProjects(prev =>
+      prev.map(p => {
+        if (p.id !== project.id) return p;
+        let nextMemo = p.memo || '';
+        let nextKzDate = p.kzReferralDate;
+        let nextOrderDate = p.orderDate;
+        let nextProb = p.probability;
+
+        if (newStatus === 'kz送客') {
+          nextKzDate = p.kzReferralDate || todayStr;
+          nextProb = 'A';
+          if (!nextMemo.includes('kz送客済')) {
+            nextMemo = `${nextMemo} | kz送客済(${nextKzDate})`;
+          }
+        } else if (newStatus === '受注') {
+          nextOrderDate = p.orderDate || todayStr;
+          nextProb = 'A';
+          if (!nextMemo.includes('受注済')) {
+            nextMemo = `${nextMemo} | 受注済(${nextOrderDate})`;
+          }
+        }
+
+        const updated: Project = {
+          ...p,
+          status: newStatus,
+          probability: nextProb,
+          kzReferralDate: nextKzDate,
+          orderDate: nextOrderDate,
+          memo: nextMemo,
+          ballHolder: nextBallHolder,
+          isImplementationProject: newIsImplementation,
+          lastActivityAt: todayStr,
+          updatedAt: nowIso
+        };
+        saveProjectToFirestore(updated);
+        return updated;
+      })
+    );
   };
 
   const handleCompleteAction = async (actionId: string) => {
@@ -831,46 +991,49 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const completedAtIso = new Date().toISOString();
     const todayStr = format(new Date(), 'yyyy-MM-dd');
-    let updatedActions = actions.map(a => 
-      a.id === actionId ? { ...a, status: '完了' as const, completedAt: completedAtIso } : a
-    );
+    let updatedActions = actions.map(a => {
+      if (a.id === actionId) {
+        const done = { ...a, status: '完了' as const, completedAt: completedAtIso };
+        saveActionToFirestore(done);
+        return done;
+      }
+      return a;
+    });
     let nextBallHolder = project.ballHolder;
 
     const result = generateActionsOnTaskCompletion(project, action.title, rules);
     if (result) {
+      result.newActions.forEach(na => saveActionToFirestore(na));
       updatedActions = [...result.newActions, ...updatedActions];
       nextBallHolder = result.nextBallHolder;
     }
 
-    if (user && user.id !== 'demo-user-1') {
-      try {
-        const actionRef = doc(db, 'actions', actionId);
-        await updateDoc(actionRef, { status: '完了', completed_at: completedAtIso });
-        const projectRef = doc(db, 'projects', project.id);
-        await updateDoc(projectRef, { ball_holder: nextBallHolder, last_activity_at: completedAtIso });
-      } catch (e: any) {
-        console.error('Error completing action in Firestore:', e);
-      }
-    }
-
     setActions(updatedActions);
-    setProjects(projects.map(p => 
-      p.id === project.id ? { ...p, ballHolder: nextBallHolder, lastActivityAt: todayStr } : p
-    ));
+    setProjects(prev =>
+      prev.map(p => {
+        if (p.id !== project.id) return p;
+        const updated = { ...p, ballHolder: nextBallHolder, lastActivityAt: todayStr, updatedAt: completedAtIso };
+        saveProjectToFirestore(updated);
+        return updated;
+      })
+    );
   };
 
   const addProject = async (newProject: Project, initialAction?: NextAction) => {
+    const prodId = isValidProductionProjectId(newProject.id) ? newProject.id : `prod-${newProject.id}`;
+    const normalizedNewProject: Project = { ...newProject, id: prodId };
+
     let newActions: NextAction[] = [];
-    let nextBallHolder = newProject.ballHolder;
-    
-    const dynamicRules = getRulesForStatus(newProject.status);
+    let nextBallHolder = normalizedNewProject.ballHolder;
+
+    const dynamicRules = getRulesForStatus(normalizedNewProject.status);
     const enterRules = dynamicRules.filter(r => r.trigger === '進入時');
-    
+
     if (enterRules.length > 0) {
-      newActions = enterRules.map(r => createDynamicAction(newProject, r));
-      nextBallHolder = newProject.salesRep;
+      newActions = enterRules.map(r => createDynamicAction(normalizedNewProject, r));
+      nextBallHolder = normalizedNewProject.salesRep;
     } else {
-      const result = generateActionsOnStatusChange(newProject, newProject.status, rules);
+      const result = generateActionsOnStatusChange(normalizedNewProject, normalizedNewProject.status, rules);
       if (result) {
         newActions = result.newActions;
         nextBallHolder = result.nextBallHolder;
@@ -878,33 +1041,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
 
     if (initialAction) {
-      newActions = [initialAction, ...newActions.filter(a => a.title !== initialAction.title)];
-      nextBallHolder = initialAction.assignee || newProject.salesRep;
+      const normalizedInitialAction: NextAction = { ...initialAction, projectId: prodId };
+      newActions = [normalizedInitialAction, ...newActions.filter(a => a.title !== normalizedInitialAction.title)];
+      nextBallHolder = normalizedInitialAction.assignee || normalizedNewProject.salesRep;
     }
 
-    const finalProject = { ...newProject, ballHolder: nextBallHolder };
-    
-    if (user && user.id !== 'demo-user-1') {
-      try {
-        const dbProject: Record<string, any> = {
-          id: finalProject.id,
-          clinic_name: finalProject.clinicName || '',
-          status: finalProject.status || '新規',
-          phase: 'sales',
-          sales_rep: finalProject.salesRep || '',
-          ball_holder: finalProject.ballHolder || '',
-          probability: finalProject.probability || 'B',
-          memo: finalProject.memo || '',
-          is_implementation_project: !!finalProject.isImplementationProject,
-          created_at: finalProject.createdAt || new Date().toISOString(),
-          updated_at: finalProject.updatedAt || new Date().toISOString(),
-          user_id: user.id
-        };
-        const projectRef = doc(db, 'projects', finalProject.id);
-        await setDoc(projectRef, dbProject);
-      } catch (projectError: any) {
-        console.error('Firebase Project Insert Error:', projectError);
-      }
+    const finalProject = { ...normalizedNewProject, ballHolder: nextBallHolder };
+    await saveProjectToFirestore(finalProject);
+    for (const act of newActions) {
+      await saveActionToFirestore(act);
     }
 
     setProjects(prev => [finalProject, ...prev]);
@@ -912,19 +1057,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   };
 
   const addProjectsBulk = (newProjects: Project[], newActions: NextAction[]) => {
+    newProjects.forEach(p => saveProjectToFirestore(p));
+    newActions.forEach(a => saveActionToFirestore(a));
     setProjects(prev => [...newProjects, ...prev]);
     setActions(prev => [...newActions, ...prev]);
   };
 
   const renameProjectStatus = async (oldStatus: string, newStatus: string) => {
-    setProjects(prev => prev.map(p => 
-      p.status === oldStatus ? { ...p, status: newStatus } : p
-    ));
+    setProjects(prev =>
+      prev.map(p => {
+        if (p.status !== oldStatus) return p;
+        const updated = { ...p, status: newStatus };
+        saveProjectToFirestore(updated);
+        return updated;
+      })
+    );
   };
 
   const updateProject = async (projectId: string, updates: Partial<Project>) => {
     setProjects(prev => {
-      const next = prev.map(p => 
+      const next = prev.map(p =>
         p.id === projectId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
       );
       const target = next.find(p => p.id === projectId);
@@ -936,17 +1088,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   };
 
   const postponeAction = async (actionId: string, days: number) => {
-    setActions(actions.map(a => {
-      if (a.id === actionId) {
-        const currentDeadline = new Date(a.deadline || new Date());
-        currentDeadline.setDate(currentDeadline.getDate() + days);
-        const yyyy = currentDeadline.getFullYear();
-        const mm = String(currentDeadline.getMonth() + 1).padStart(2, '0');
-        const dd = String(currentDeadline.getDate()).padStart(2, '0');
-        return { ...a, deadline: `${yyyy}-${mm}-${dd}` };
-      }
-      return a;
-    }));
+    setActions(prev =>
+      prev.map(a => {
+        if (a.id === actionId) {
+          const currentDeadline = new Date(a.deadline || new Date());
+          currentDeadline.setDate(currentDeadline.getDate() + days);
+          const yyyy = currentDeadline.getFullYear();
+          const mm = String(currentDeadline.getMonth() + 1).padStart(2, '0');
+          const dd = String(currentDeadline.getDate()).padStart(2, '0');
+          const updated = { ...a, deadline: `${yyyy}-${mm}-${dd}` };
+          saveActionToFirestore(updated);
+          return updated;
+        }
+        return a;
+      })
+    );
   };
 
   /**
@@ -964,23 +1120,32 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setProjects(prev =>
         prev.map(p => {
           if (!matchedIds.has(p.id)) return p;
-          return {
+          const updated: Project = {
             ...p,
             status: rule.nextStage && p.status !== '受注' && p.status !== '失注' ? rule.nextStage : p.status,
             probability: rule.autoProbability || p.probability,
             updatedAt: nowIso
           };
+          saveProjectToFirestore(updated);
+          return updated;
         })
       );
     }
 
     setActions(prev => {
-      const markedDone = prev.map(a =>
-        matchedIds.has(a.projectId) && a.status === '未完了'
-          ? { ...a, status: '完了' as const, completedAt: nowIso }
-          : a
-      );
-      const generated = matched.map(p => createActionFromGlobalRule(p, rule));
+      const markedDone = prev.map(a => {
+        if (matchedIds.has(a.projectId) && a.status === '未完了') {
+          const done = { ...a, status: '完了' as const, completedAt: nowIso };
+          saveActionToFirestore(done);
+          return done;
+        }
+        return a;
+      });
+      const generated = matched.map(p => {
+        const act = createActionFromGlobalRule(p, rule);
+        saveActionToFirestore(act);
+        return act;
+      });
       return [...generated, ...markedDone];
     });
 

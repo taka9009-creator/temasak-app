@@ -19,6 +19,7 @@ export type QuickCallOutcome =
   | 'ポスティング'
   | '相談メール'
   | '後追いメール'
+  | 'kz送客'
   | '受注';
 
 export const ACTION_POINT_RULES: Record<QuickCallOutcome, number> = {
@@ -34,6 +35,7 @@ export const ACTION_POINT_RULES: Record<QuickCallOutcome, number> = {
   'ポスティング': 2,
   '相談メール': 3,
   '後追いメール': 2,
+  'kz送客': 5,
   '受注': 10,
   '面談設定': 5,
   '資料送付': 2
@@ -46,6 +48,7 @@ export const SALES_PROGRESS_FLOW = [
   '見積',
   '検討',
   '後追い',
+  'kz送客',
   '受注'
 ] as const;
 
@@ -75,14 +78,19 @@ export function isBtoBDealerProject(project: Project): boolean {
 }
 
 /**
- * 既存・旧ステータス表記を進捗フロー7段階（問合せ・初動・デモ・見積・検討・後追い・受注）に正規化するヘルパー
+ * 既存・旧ステータス表記を進捗フロー8段階（問合せ・初動・デモ・見積・検討・後追い・kz送客・受注）に正規化するヘルパー
+ * ※kz送客＝補助金コンサルタントへの送客（補助金採択後に受注）
  */
 export function normalizeProgressStage(project: Project): SalesProgressStage {
   const s = project.status || '';
   if ((SALES_PROGRESS_FLOW as readonly string[]).includes(s)) {
     return s as SalesProgressStage;
   }
+  if (s === 'KZ送客' || s === 'kz送客') {
+    return 'kz送客';
+  }
   if (s === '新規') {
+    if (project.kzReferralDate || project.memo?.includes('kz送客済')) return 'kz送客';
     if (project.followupEmailDate || project.memo?.includes('後追いメール済')) return '後追い';
     if (project.consultEmailDate || project.memo?.includes('相談メール済')) return '検討';
     if (project.estimateSentDate || project.memo?.includes('見積書送付済')) return '見積';
@@ -91,6 +99,7 @@ export function normalizeProgressStage(project: Project): SalesProgressStage {
     return '問合せ';
   }
   if (s === '商談') {
+    if (project.kzReferralDate || project.memo?.includes('kz送客済')) return 'kz送客';
     if (project.followupEmailDate || project.memo?.includes('後追いメール済')) return '後追い';
     if (project.consultEmailDate || project.memo?.includes('相談メール済') || project.estimateSentDate) return '検討';
     if (project.demoDate || project.memo?.includes('面談日:')) return 'デモ';
@@ -100,7 +109,6 @@ export function normalizeProgressStage(project: Project): SalesProgressStage {
   if (
     s === '契約' ||
     s === '楽々報告' ||
-    s === 'KZ送客' ||
     s === 'CL希望' ||
     s === '補助受注' ||
     s === '現地調査' ||
@@ -225,6 +233,7 @@ export interface Project {
   postingDate?: string; // ポスティング実施日 (+2p)
   consultEmailDate?: string; // 相談メール送付日 (+3p)
   followupEmailDate?: string; // 後追いメール送付日 (+2p)
+  kzReferralDate?: string; // kz送客日（補助金コンサルタント送客日 +5p）
   orderDate?: string; // 受注日 (+10p)
   
   clinicHours?: string;
@@ -248,6 +257,7 @@ export function inferActivityPoints(act: Activity): number {
   }
   if (text.includes('初動メール') || text.includes('〇案内メール')) return 5;
   if (text.includes('見積書送付')) return 5;
+  if (text.includes('kz送客') || text.includes('KZ送客') || text.includes('補助金コンサル')) return 5;
   if (text.includes('オンラインデモ') || text.includes('訪問デモ') || text.includes('来社デモ') || text.includes('面談')) return 5;
   if (text.includes('相談メール')) return 3;
   if (text.includes('後追いメール')) return 2;
@@ -304,6 +314,7 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
   const postingDate = findLatestDateByKeyword(['ポスティング']);
   const consultEmailDate = findLatestDateByKeyword(['相談メール']);
   const followupEmailDate = findLatestDateByKeyword(['後追いメール']);
+  const kzReferralDate = findLatestDateByKeyword(['kz送客', 'KZ送客', '補助金コンサル']);
   const orderDate = findLatestDateByKeyword(['受注']);
 
   let demoDate: string | undefined;
@@ -359,6 +370,11 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
   } else if (memo.includes('後追いメール済(')) {
     memo = memo.replace(/後追いメール済\([^)]*\)/g, `後追いメール済(${followupEmailDate})`);
   }
+  if (!kzReferralDate) {
+    memo = memo.replace(/\s*\|\s*kz送客済\([^)]*\)/g, '');
+  } else if (memo.includes('kz送客済(')) {
+    memo = memo.replace(/kz送客済\([^)]*\)/g, `kz送客済(${kzReferralDate})`);
+  }
   if (!orderDate) {
     memo = memo.replace(/\s*\|\s*受注済\([^)]*\)/g, '');
   } else if (memo.includes('受注済(')) {
@@ -383,6 +399,7 @@ export function syncProjectWithActivities(project: Project, nextActivities: Acti
     postingDate,
     consultEmailDate,
     followupEmailDate,
+    kzReferralDate,
     orderDate,
     memo: memo.trim(),
     updatedAt: new Date().toISOString()

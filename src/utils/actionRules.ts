@@ -198,6 +198,7 @@ export const scanMatchingProjectsForRule = (
       if (tv === 'ポスティング') return !!(p.postingDate || memo.includes('ポスティング済'));
       if (tv === '相談メール') return !!(p.consultEmailDate || memo.includes('相談メール済'));
       if (tv === '後追いメール') return !!(p.followupEmailDate || memo.includes('後追いメール済'));
+      if (tv === 'kz送客') return !!(p.kzReferralDate || stage === 'kz送客' || memo.includes('kz送客済'));
       if (tv === '受注') return !!(p.orderDate || stage === '受注' || memo.includes('受注済'));
       if (tv === '会話') return memo.includes('架電状況: 会話');
       if (tv === '不在') return memo.includes('架電状況: 不在');

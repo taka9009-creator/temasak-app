@@ -155,7 +155,7 @@ export default function Reports() {
     const btobDemoRate = btobTotal > 0 ? Math.round((btobDemo / btobTotal) * 100) : 0;
     const btobWonRate = btobTotal > 0 ? Math.round((btobWon / btobTotal) * 100) : 0;
 
-    // 7段階進捗フロー別件数（現在地ベース ＆ 到達累積ベース）
+    // 8段階進捗フロー別件数（現在地ベース ＆ 到達累積ベース）
     const stageCounts: Record<SalesProgressStage, { current: number; cumulative: number; avgPts: number }> = {
       '問合せ': { current: 0, cumulative: 0, avgPts: 0 },
       '初動': { current: 0, cumulative: 0, avgPts: 0 },
@@ -163,6 +163,7 @@ export default function Reports() {
       '見積': { current: 0, cumulative: 0, avgPts: 0 },
       '検討': { current: 0, cumulative: 0, avgPts: 0 },
       '後追い': { current: 0, cumulative: 0, avgPts: 0 },
+      'kz送客': { current: 0, cumulative: 0, avgPts: 0 },
       '受注': { current: 0, cumulative: 0, avgPts: 0 }
     };
 
@@ -173,6 +174,7 @@ export default function Reports() {
       '見積': 0,
       '検討': 0,
       '後追い': 0,
+      'kz送客': 0,
       '受注': 0
     };
 
@@ -325,6 +327,7 @@ export default function Reports() {
       '初動メール (+5p)': { count: 0, pts: 0 },
       '見積書送付 (+5p)': { count: 0, pts: 0 },
       '各種デモ決定 (+5p)': { count: 0, pts: 0 },
+      'kz送客・補助金コンサル (+5p)': { count: 0, pts: 0 },
       '架電: 会話 (+3p)': { count: 0, pts: 0 },
       '現地訪問 (+3p)': { count: 0, pts: 0 },
       '相談メール (+3p)': { count: 0, pts: 0 },
@@ -342,6 +345,9 @@ export default function Reports() {
         if (t.includes('受注')) {
           actionBreakdown['受注確定 (+10p)'].count++;
           actionBreakdown['受注確定 (+10p)'].pts += pVal;
+        } else if (t.includes('kz送客') || t.includes('KZ送客') || t.includes('補助金コンサル')) {
+          actionBreakdown['kz送客・補助金コンサル (+5p)'].count++;
+          actionBreakdown['kz送客・補助金コンサル (+5p)'].pts += pVal;
         } else if (t.includes('初動メール') || t.includes('〇案内メール')) {
           actionBreakdown['初動メール (+5p)'].count++;
           actionBreakdown['初動メール (+5p)'].pts += pVal;
@@ -824,7 +830,7 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* 7段階 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → 受注）完全内訳バー */}
+        {/* 8段階 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）完全内訳バー */}
         <div style={{
           backgroundColor: '#ffffff',
           borderRadius: '0.75rem',
@@ -832,13 +838,13 @@ export default function Reports() {
           border: '1px solid #dbeafe'
         }}>
           <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1e3a8a', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🔄 7段階 進捗フロー別 分布（ステージをクリックで該当案件を表示）</span>
+            <span>🔄 8段階 進捗フロー別 分布（ステージをクリックで該当案件を表示 / kz送客＝補助金採択後に受注）</span>
             <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
               現在地件数 ／ 通過累計件数 ／ ステージ平均ポイント
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(110px, 1fr))', gap: '0.5rem', overflowX: 'auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${SALES_PROGRESS_FLOW.length}, minmax(105px, 1fr))`, gap: '0.5rem', overflowX: 'auto' }}>
             {SALES_PROGRESS_FLOW.map((stage, idx) => {
               const info = analytics.stageCounts[stage];
               const isSelected = drillStage === stage;

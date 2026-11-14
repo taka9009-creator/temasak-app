@@ -48,34 +48,7 @@ export const useNotifications = () => {
   return context;
 };
 
-const initialNotifications: AppNotification[] = [
-  {
-    id: 'n1',
-    title: '本日期限のタスク',
-    message: '「△△医院」の見積作成タスクが本日期限です。',
-    type: 'task',
-    createdAt: new Date().toISOString(),
-    isRead: false,
-    actionable: true,
-    actionData: { taskId: 'a-1' }
-  },
-  {
-    id: 'n2',
-    title: '⚠️ 危険アラート',
-    message: '「〇〇クリニック」の設置日まであと3日ですが、カラーが未定です。',
-    type: 'alert',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    isRead: false,
-  },
-  {
-    id: 'n3',
-    title: '契約獲得🎉',
-    message: '「鈴木歯科」の見積が承認され、契約となりました！',
-    type: 'info',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-    isRead: true,
-  }
-];
+const initialNotifications: AppNotification[] = [];
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [notifications, setNotifications] = useState<AppNotification[]>(initialNotifications);
@@ -238,19 +211,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(n => n.id !== id));
   };
-
-  // 初回ロード時にモックのトーストを1つだけ出す（デモ用）
-  useEffect(() => {
-    setTimeout(() => {
-      // settings.showToasts を直接参照するとクロージャで初期値に固定される可能性があるが
-      // ここは初回のみのデモ用なので、localStorage から直接確認する
-      const saved = localStorage.getItem('temasak-notification-settings');
-      const show = saved ? JSON.parse(saved).showToasts : true;
-      if (show) {
-        setToasts([initialNotifications[0]]);
-      }
-    }, 2000);
-  }, []);
 
   return (
     <NotificationContext.Provider value={{

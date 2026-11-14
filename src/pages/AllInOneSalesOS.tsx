@@ -45,7 +45,7 @@ import type { Project, QuickCallOutcome, LostReasonType, SalesProgressStage } fr
 type CallFilter = 'all' | 'callback' | 'absent' | 'uncall' | 'talked' | 'interview' | 'won' | 'archived';
 type AreaFilter = 'all' | '北海道' | '宮城県' | '福島県' | '秋田県' | '岩手県';
 type SortMode = 'date_desc' | 'points_desc' | 'points_asc';
-type SegmentViewMode = 'split' | 'clinic_only' | 'btob_only';
+type SegmentViewMode = 'split' | 'clinic_only' | 'btob_only' | 'won_only' | 'archived_only';
 
 const DAILY_PT_Goal = 20;
 const LOST_REASONS: LostReasonType[] = ['他社導入', '金銭面', 'その他'];
@@ -67,6 +67,7 @@ export default function AllInOneSalesOS() {
     archiveProjectAsLost,
     restoreArchivedProject,
     handleCompleteAction,
+    handleStatusChange,
     postponeAction,
     updateProject,
     resetToRoster42
@@ -187,6 +188,15 @@ export default function AllInOneSalesOS() {
         badgeBg: '#fef3c7',
         badgeColor: '#b45309',
         borderColor: '#f59e0b'
+      };
+    }
+    if (p.status === 'kz送客' || p.kzReferralDate || memo.includes('kz送客済')) {
+      return {
+        code: 'interview',
+        label: '💰 kz送客済（補助金採択後に受注）',
+        badgeBg: '#cffafe',
+        badgeColor: '#0f766e',
+        borderColor: '#67e8f9'
       };
     }
     if (
@@ -446,14 +456,72 @@ export default function AllInOneSalesOS() {
     return matched;
   }, [projects, callFilter, areaFilter, selectedMonth, searchQuery, sortMode]);
 
-  // クリニック直販リスト と BtoBディーラー・パートナー企業リスト に別枠分割
+  // クリニック直販（営業中のみ・受注と失注は別枠へ分離）、BtoB別枠、クリニック受注別枠、クリニック失注別枠
+  const isWonClinicOrProject = (p: Project): boolean => {
+    if (p.status === '失注') return false;
+    return normalizeProgressStage(p) === '受注' || p.status === '受注' || !!p.orderDate || !!p.memo?.includes('受注済');
+  };
+
+  const matchesCommonFilters = (p: Project): boolean => {
+    if (areaFilter !== 'all' && !p.address?.startsWith(areaFilter)) return false;
+    if (selectedMonth !== 'all' && !p.receivedAt?.startsWith(selectedMonth)) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = p.clinicName.toLowerCase().includes(q);
+      const matchAddr = (p.address || '').toLowerCase().includes(q);
+      const matchType = (p.clinicType || '').toLowerCase().includes(q);
+      const matchMemo = (p.memo || '').toLowerCase().includes(q);
+      const matchLost = (p.lostReason || '').toLowerCase().includes(q);
+      if (!matchName && !matchAddr && !matchType && !matchMemo && !matchLost) return false;
+    }
+    return true;
+  };
+
+  const sortProjectsList = (list: Project[]): Project[] => {
+    if (sortMode === 'points_desc') {
+      return [...list].sort((a, b) => getClinicTotalPoints(b) - getClinicTotalPoints(a));
+    }
+    if (sortMode === 'points_asc') {
+      return [...list].sort((a, b) => getClinicTotalPoints(a) - getClinicTotalPoints(b));
+    }
+    return list;
+  };
+
+  // 1. 🏥 クリニック 営業中リスト（受注と失注を除いた純粋な営業進行中クリニックのみ）
   const clinicFilteredProjects = useMemo(
-    () => filteredProjects.filter(p => !isBtoBDealerProject(p)),
-    [filteredProjects]
+    () =>
+      filteredProjects.filter(p => {
+        if (isBtoBDealerProject(p)) return false;
+        if (callFilter !== 'won' && callFilter !== 'archived') {
+          if (isWonClinicOrProject(p) || p.status === '失注') return false;
+        }
+        return true;
+      }),
+    [filteredProjects, callFilter]
   );
+
+  // 2. 🏢 BtoB ディーラー・パートナー企業リスト（別枠）
   const btobFilteredProjects = useMemo(
     () => filteredProjects.filter(p => isBtoBDealerProject(p)),
     [filteredProjects]
+  );
+
+  // 3. 🎉 クリニック 受注（成約済）リスト（営業中リストとは別枠）
+  const wonClinicProjects = useMemo(
+    () =>
+      sortProjectsList(
+        projects.filter(p => !isBtoBDealerProject(p) && isWonClinicOrProject(p) && matchesCommonFilters(p))
+      ),
+    [projects, areaFilter, selectedMonth, searchQuery, sortMode]
+  );
+
+  // 4. 🗄️ クリニック アーカイブ（失注）リスト（営業中リストとは別枠）
+  const archivedClinicProjects = useMemo(
+    () =>
+      sortProjectsList(
+        projects.filter(p => p.status === '失注' && !isBtoBDealerProject(p) && matchesCommonFilters(p))
+      ),
+    [projects, areaFilter, selectedMonth, searchQuery, sortMode]
   );
 
   const isFiltered =
@@ -487,6 +555,7 @@ export default function AllInOneSalesOS() {
       'ポスティング': { pts: 2, label: 'ポスティング実施 (+2p)' },
       '相談メール': { pts: 3, label: '相談メール送付 (+3p)' },
       '後追いメール': { pts: 2, label: '後追いメール送付 (+2p)' },
+      'kz送客': { pts: 5, label: '💰 kz送客・補助金コンサル送客 (+5p)' },
       '受注': { pts: 10, label: '🎉 受注確定！ (+10p)' },
       '面談設定': { pts: 5, label: '面談・実機デモ設定達成！ (+5p)' },
       '資料送付': { pts: 2, label: '資料送付 (+2p)' }
@@ -509,6 +578,7 @@ export default function AllInOneSalesOS() {
       '見積書送付': '見積',
       '相談メール': '検討',
       '後追いメール': '後追い',
+      'kz送客': 'kz送客（採択後に受注）',
       '受注': '受注'
     };
     const nextStageLabel = stageMap[outcome];
@@ -518,12 +588,16 @@ export default function AllInOneSalesOS() {
     );
   };
 
-  // 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → 受注）クリック連動ハンドラ
+  // 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）クリック連動ハンドラ（案件カンバンと完全同期）
   const handleSelectProgressStage = (p: Project, stage: SalesProgressStage) => {
     const currentStage = normalizeProgressStage(p);
     if (currentStage === stage && p.status === stage) return;
-    updateProject(p.id, { status: stage });
-    triggerToast(`🚀 「${p.clinicName}」の進捗フローを【${stage}】に更新しました`);
+    handleStatusChange(p.id, stage);
+    triggerToast(
+      stage === 'kz送客'
+        ? `💰 「${p.clinicName}」を【kz送客（補助金コンサル送客・採択後に受注）】へ更新しました（カンバンと同期済）`
+        : `🚀 「${p.clinicName}」の進捗フロー＆カンバンを【${stage}】に同期更新しました`
+    );
   };
 
   // 各アクションボタン押下時に「実施日を選択（今日 / 明日 / +3日後 / +1週間後）」ピッカーを開く
@@ -553,6 +627,8 @@ export default function AllInOneSalesOS() {
       defaultDate = p.consultEmailDate;
     } else if (actionType === '後追いメール' && p.followupEmailDate) {
       defaultDate = p.followupEmailDate;
+    } else if (actionType === 'kz送客' && p.kzReferralDate) {
+      defaultDate = p.kzReferralDate;
     } else if (actionType === '受注' && p.orderDate) {
       defaultDate = p.orderDate;
     }
@@ -1718,13 +1794,13 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         </div>
       )}
 
-      {/* 4. メイン名簿カードリスト（クリニック直販枠 ＆ BtoBディーラー・パートナー別枠 の2枠リスト化） */}
+      {/* 4. メイン名簿カードリスト（クリニック営業中枠 ／ クリニック受注別枠 ／ クリニック失注別枠 ／ BtoB別枠 の4枠分離） */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-        {/* 視認性を高めた「対象リスト件数＆2枠切替＆アーカイブ切替」ヘッダーバー */}
+        {/* 視認性を高めた「対象リスト件数＆別枠切替」ヘッダーバー */}
         <div style={{
           backgroundColor: '#ffffff',
           border: '1px solid #cbd5e1',
-          borderLeft: `5px solid ${callFilter === 'archived' ? '#475569' : '#1e40af'}`,
+          borderLeft: `5px solid ${callFilter === 'archived' ? '#475569' : callFilter === 'won' ? '#059669' : '#1e40af'}`,
           borderRadius: '0.75rem',
           padding: '0.75rem 1.15rem',
           display: 'flex',
@@ -1734,26 +1810,46 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           gap: '0.75rem',
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>
-              {callFilter === 'archived' ? '🗄️ アーカイブ（失注）リスト' : '📋 営業中リスト（2枠別枠管理）'}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
+              📋 別枠リスト管理:
             </span>
             <span style={{
-              backgroundColor: callFilter === 'archived' ? '#475569' : '#1e40af',
+              backgroundColor: '#1e40af',
               color: '#ffffff',
-              fontSize: '0.84rem',
+              fontSize: '0.8rem',
               fontWeight: 800,
-              padding: '0.2rem 0.7rem',
+              padding: '0.18rem 0.65rem',
               borderRadius: '999px'
             }}>
-              🏥 クリニック {clinicFilteredProjects.length}件
+              🏥 クリニック営業中 {clinicFilteredProjects.length}件
+            </span>
+            <span style={{
+              backgroundColor: '#059669',
+              color: '#ffffff',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              padding: '0.18rem 0.65rem',
+              borderRadius: '999px'
+            }}>
+              🎉 受注(別枠) {wonClinicProjects.length}件
+            </span>
+            <span style={{
+              backgroundColor: '#475569',
+              color: '#ffffff',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              padding: '0.18rem 0.65rem',
+              borderRadius: '999px'
+            }}>
+              🗄️ 失注(別枠) {archivedClinicProjects.length}件
             </span>
             <span style={{
               backgroundColor: '#4338ca',
               color: '#ffffff',
-              fontSize: '0.84rem',
+              fontSize: '0.8rem',
               fontWeight: 800,
-              padding: '0.2rem 0.7rem',
+              padding: '0.18rem 0.65rem',
               borderRadius: '999px'
             }}>
               🏢 BtoBパートナー {btobFilteredProjects.length}社
@@ -1780,25 +1876,32 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     cursor: 'pointer'
                   }}
                 >
-                  ✕ 全件（2枠表示）へ戻す
+                  ✕ 全枠表示へ戻す
                 </button>
               </>
             )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.76rem' }}>
-            {/* リスト枠切替ピル（2枠別々で全表示 / クリニック枠のみ / BtoB枠のみ） */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe' }}>
+            {/* リスト枠切替ピル（全枠表示 / クリニック営業中のみ / 受注枠のみ / 失注枠のみ / BtoB枠のみ） */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 800, color: '#3730a3', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示枠:</span>
               {[
-                { id: 'split', label: `📊 2枠別々で全表示` },
-                { id: 'clinic_only', label: `🏥 クリニック枠 (${clinicFilteredProjects.length}件)` },
-                { id: 'btob_only', label: `🏢 BtoB別枠 (${btobFilteredProjects.length}社)` }
+                { id: 'split', label: `📊 全枠を別々で表示` },
+                { id: 'clinic_only', label: `🏥 営業中のみ (${clinicFilteredProjects.length})` },
+                { id: 'won_only', label: `🎉 受注別枠 (${wonClinicProjects.length})` },
+                { id: 'archived_only', label: `🗄️ 失注別枠 (${archivedClinicProjects.length})` },
+                { id: 'btob_only', label: `🏢 BtoB別枠 (${btobFilteredProjects.length})` }
               ].map(opt => (
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => setSegmentViewMode(opt.id as SegmentViewMode)}
+                  onClick={() => {
+                    if (opt.id !== 'won_only' && opt.id !== 'archived_only' && (callFilter === 'won' || callFilter === 'archived')) {
+                      setCallFilter('all');
+                    }
+                    setSegmentViewMode(opt.id as SegmentViewMode);
+                  }}
                   style={{
                     padding: '0.18rem 0.55rem',
                     borderRadius: '0.35rem',
@@ -1842,44 +1945,19 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 </button>
               ))}
             </div>
-
-            <button
-              type="button"
-              onClick={() => setCallFilter(callFilter === 'archived' ? 'all' : 'archived')}
-              style={{
-                padding: '0.25rem 0.7rem',
-                borderRadius: '0.4rem',
-                border: callFilter === 'archived' ? '1px solid #1e40af' : '1px solid #94a3b8',
-                backgroundColor: callFilter === 'archived' ? '#eff6ff' : '#f8fafc',
-                color: callFilter === 'archived' ? '#1d4ed8' : '#334155',
-                fontWeight: 800,
-                fontSize: '0.76rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.3rem'
-              }}
-            >
-              <Archive size={13} />
-              <span>
-                {callFilter === 'archived'
-                  ? `📋 営業中リストに戻る`
-                  : `🗄️ アーカイブ・失注一覧 (${kpiStats.archivedCount}件)`}
-              </span>
-            </button>
           </div>
         </div>
 
         {[
           {
             id: 'clinic' as const,
-            visible: segmentViewMode !== 'btob_only',
-            title:
-              callFilter === 'archived'
-                ? '🏥 クリニック アーカイブ（失注）リスト'
-                : '🏥 クリニック 営業中リスト（直販枠）',
-            subtitle: '医療機関（医科・歯科・薬局）への直販アプローチ対象リスト',
-            badgeLabel: '直販枠',
+            visible:
+              callFilter !== 'archived' &&
+              callFilter !== 'won' &&
+              (segmentViewMode === 'split' || segmentViewMode === 'clinic_only'),
+            title: '🏥 クリニック 営業中リスト（直販・進行中のみ）',
+            subtitle: '現在アプローチ・商談進行中の医療機関リスト（問合せ ▸ 初動 ▸ デモ ▸ 見積 ▸ 検討 ▸ 後追い ▸ kz送客 ※受注・失注は下部別枠に分離）',
+            badgeLabel: '営業進行中',
             badgeBg: '#1e40af',
             headerBg: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
             containerBg: '#f8fafc',
@@ -1889,14 +1967,46 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             list: clinicFilteredProjects
           },
           {
+            id: 'clinic_won' as const,
+            visible:
+              callFilter !== 'archived' &&
+              (callFilter === 'won' || segmentViewMode === 'split' || segmentViewMode === 'won_only'),
+            title: '🎉 クリニック 受注（成約確定）リスト【別枠】',
+            subtitle: 'ご契約・受注が確定したクリニック専用枠（営業中リストとは別枠で管理。進捗フローのクリックで前ステージへ戻すことも可能です）',
+            badgeLabel: '🎉 受注別枠',
+            badgeBg: '#059669',
+            headerBg: 'linear-gradient(135deg, #ecfdf5 0%, #fef3c7 100%)',
+            containerBg: '#f0fdf4',
+            borderColor: '#34d399',
+            accentColor: '#059669',
+            unit: '件',
+            list: wonClinicProjects
+          },
+          {
+            id: 'clinic_archive' as const,
+            visible:
+              callFilter !== 'won' &&
+              (callFilter === 'archived' || segmentViewMode === 'split' || segmentViewMode === 'archived_only'),
+            title: '🗄️ クリニック アーカイブ（失注）リスト【別枠】',
+            subtitle: '失注理由（他社導入・金銭面・その他）とともに営業中リストから別枠保管されたクリニック一覧。いつでも「🔄 営業リストに戻す（復活）」で復帰可能です。',
+            badgeLabel: '🗄️ 失注別枠',
+            badgeBg: '#475569',
+            headerBg: 'linear-gradient(135deg, #f1f5f9 0%, #f8fafc 100%)',
+            containerBg: '#f8fafc',
+            borderColor: '#94a3b8',
+            accentColor: '#475569',
+            unit: '件',
+            list: archivedClinicProjects
+          },
+          {
             id: 'btob' as const,
-            visible: segmentViewMode !== 'clinic_only',
-            title:
-              callFilter === 'archived'
-                ? '🏢 ディーラー・パートナー企業 アーカイブ（BtoB別枠）'
-                : '🏢 ディーラー・パートナー企業 営業中リスト（BtoB別枠リスト）',
+            visible:
+              callFilter !== 'archived' &&
+              callFilter !== 'won' &&
+              (segmentViewMode === 'split' || segmentViewMode === 'btob_only'),
+            title: '🏢 ディーラー・パートナー企業 営業中リスト【BtoB別枠】',
             subtitle: '医療機器ディーラー・卸・紹介パートナー企業向けのBtoBアライアンス＆同行営業リスト（※クリニック直販とは別枠でリスト化・KPI集計）',
-            badgeLabel: 'BtoB別枠',
+            badgeLabel: '🏢 BtoB別枠',
             badgeBg: '#4338ca',
             headerBg: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)',
             containerBg: '#f5f7ff',
@@ -2015,6 +2125,10 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           const hasPosting = project.memo?.includes('ポスティング済') || !!project.postingDate;
           const hasConsultEmail = project.memo?.includes('相談メール済') || !!project.consultEmailDate;
           const hasFollowupEmail = project.memo?.includes('後追いメール済') || !!project.followupEmailDate;
+          const hasKzReferral =
+            project.status === 'kz送客' ||
+            project.memo?.includes('kz送客済') ||
+            !!project.kzReferralDate;
           const hasOrder = project.status === '受注' || project.memo?.includes('受注済') || !!project.orderDate;
           const demoInfo = extractDemoInfo(project);
           const isDemoPickerOpenForThis = activeDemoPicker?.projectId === project.id;
@@ -2318,6 +2432,24 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       </span>
                     )}
 
+                    {hasKzReferral && (
+                      <span
+                        onClick={() => openDemoDatePicker(project, 'kz送客')}
+                        title="補助金コンサルタント（kz）へ送客済・採択後に受注（クリックで送客日を選択・更新）"
+                        style={{
+                          padding: '0.14rem 0.6rem',
+                          borderRadius: '0.3rem',
+                          backgroundColor: '#cffafe',
+                          color: '#0f766e',
+                          border: '1px solid #22d3ee',
+                          fontWeight: 900,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        💰 kz送客済（採択待ち）{project.kzReferralDate ? ` (${project.kzReferralDate.slice(5)})` : ''}
+                      </span>
+                    )}
+
                     {hasOrder && (
                       <span
                         onClick={() => openDemoDatePicker(project, '受注')}
@@ -2339,7 +2471,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     <span style={{ color: '#64748b', fontWeight: 600 }}>担当: {project.salesRep}</span>
                   </div>
 
-                  {/* 7段階 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → 受注）※アクションボタンと自動連動＆クリック切替可 */}
+                  {/* 8段階 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）※案件カンバン＆アクションボタンと自動連動 */}
                   {!isArchived && (
                     <div style={{
                       marginTop: '0.55rem',
@@ -2359,33 +2491,48 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                         const isCurrent = idx === currentProgressIdx;
                         const isPassed = idx < currentProgressIdx;
                         const isWon = stage === '受注' && isCurrent;
+                        const isKz = stage === 'kz送客';
                         return (
                           <React.Fragment key={stage}>
                             <button
                               type="button"
                               onClick={() => handleSelectProgressStage(project, stage)}
-                              title={`進捗ステージを「${stage}」に変更（下のアクションボタンとも自動連動します）`}
+                              title={
+                                isKz
+                                  ? '進捗ステージを「kz送客（補助金コンサルタント送客・採択後に受注）」に変更（案件カンバンともリアルタイム連動）'
+                                  : `進捗ステージを「${stage}」に変更（案件カンバン＆下のアクションボタンとも自動連動します）`
+                              }
                               style={{
                                 padding: '0.16rem 0.52rem',
                                 borderRadius: '0.35rem',
                                 border: isCurrent
                                   ? isWon
                                     ? '2px solid #059669'
+                                    : isKz
+                                    ? '2px solid #0891b2'
                                     : '2px solid #1d4ed8'
                                   : isPassed
                                   ? '1px solid #93c5fd'
+                                  : isKz
+                                  ? '1px solid #67e8f9'
                                   : '1px solid #cbd5e1',
                                 backgroundColor: isCurrent
                                   ? isWon
                                     ? '#059669'
+                                    : isKz
+                                    ? '#0891b2'
                                     : '#1d4ed8'
                                   : isPassed
                                   ? '#dbeafe'
+                                  : isKz
+                                  ? '#ecfeff'
                                   : '#ffffff',
                                 color: isCurrent
                                   ? '#ffffff'
                                   : isPassed
                                   ? '#1e40af'
+                                  : isKz
+                                  ? '#0f766e'
                                   : '#64748b',
                                 fontSize: '0.72rem',
                                 fontWeight: isCurrent ? 900 : 700,
@@ -2736,6 +2883,26 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       }}
                     >
                       <Mail size={12} /> 後追いメール (+2p)
+                    </button>
+
+                    <button
+                      onClick={() => openDemoDatePicker(project, 'kz送客')}
+                      title="「kz送客 (+5p)」補助金コンサルタントへの送客日を選択して記録（進捗: kz送客へ連動・採択後に受注）"
+                      style={{
+                        padding: '0.32rem 0.65rem',
+                        borderRadius: '0.45rem',
+                        border: isDemoPickerOpenForThis && activeDemoPicker?.demoType === 'kz送客' ? '2px solid #0e7490' : '1px solid #06b6d4',
+                        backgroundColor: hasKzReferral || (isDemoPickerOpenForThis && activeDemoPicker?.demoType === 'kz送客') ? '#cffafe' : '#ecfeff',
+                        color: '#0f766e',
+                        fontSize: '0.74rem',
+                        fontWeight: 900,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.2rem'
+                      }}
+                    >
+                      💰 kz送客 (+5p)
                     </button>
 
                     <button

@@ -99,7 +99,7 @@ export default function ProjectRegistration() {
       return;
     }
 
-    const projectId = uuidv4();
+    const projectId = `prod-${uuidv4()}`;
     const today = new Date();
     const initialStatus = kanbanColumns.length > 0 ? kanbanColumns[0].id : '新規';
 

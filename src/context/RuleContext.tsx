@@ -180,6 +180,25 @@ export const DEFAULT_EASY_OS_RULES: GlobalRule[] = [
     aiDraftHint: '後追いメール'
   },
   {
+    id: 'rule-easy-6b',
+    name: '💰 kz送客(+5p / 補助金コンサル送客) ➔ 進捗【kz送客】＆「補助金採択後の🎉受注確定フォロー」',
+    category: 'デモ・見積・後追い',
+    description: '補助金コンサルタント（kz）へ送客したクリニックを進捗【kz送客】・確度【A】へ自動更新し、補助金採択後に「🎉受注 (+10p)」へ繋げるフォロータスクを生成します。',
+    isActive: true,
+    targetSegment: 'clinic_only',
+    triggerType: 'action_recorded',
+    triggerValue: 'kz送客',
+    actionType: 'create_task',
+    actionTitle: '💰 【kz送客・補助金申請中】補助金コンサル（kz）進捗確認 ＆ 採択後の「🎉受注」確定フォロー',
+    actionDaysToDeadline: 7,
+    actionAssignee: '松浦 貴文',
+    actionPriority: '高',
+    actionMemo: '補助金コンサルタント（kz）へ送客済(+5p)。採択結果を確認し次第、速やかに「🎉受注(+10p)」へ進める。',
+    nextStage: 'kz送客',
+    autoProbability: 'A',
+    aiDraftHint: '補助金案内'
+  },
+  {
     id: 'rule-easy-7',
     name: '🏆 クリニック累計ポイント【10p以上】到達 ➔ ホットリード覚醒！「院長最終クロージング」',
     category: 'ポイント到達連動',

@@ -34,11 +34,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function MainLayout({ isSidebarOpen, setIsSidebarOpen }: { isSidebarOpen: boolean, setIsSidebarOpen: (b: boolean) => void }) {
   return (
-    <div className="app-container" style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <div className="app-container" style={{ display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' }}>
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-      <main className="main-content" style={{ flex: 1, overflowY: 'auto', padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <main className="main-content" style={{ flex: 1, minWidth: 0, maxWidth: '100%', overflowY: 'auto', overflowX: 'hidden', padding: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         <TopHeader onMenuClick={() => setIsSidebarOpen(true)} />
-        <div style={{ padding: '1.5rem 2rem', flex: 1 }}>
+        <div style={{ padding: '1.25rem 1.5rem', flex: 1, minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }}>
           <Routes>
             {/* 超かんたん統合オールインワン画面（デフォルト） */}
             <Route path="/" element={<AllInOneSalesOS />} />
