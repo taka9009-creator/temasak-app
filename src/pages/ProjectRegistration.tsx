@@ -26,6 +26,7 @@ const EMPTY_EXTRA = {
   address: '',
   postalCode: '',
   contactTitle: '',
+  furigana: '',
   rececon: '',
   inquiryNo: '',
   receivedAt: '',
@@ -96,6 +97,7 @@ export default function ProjectRegistration() {
       clinicName: parsed.clinicName || prev.clinicName,
       contactPerson: parsed.contactPerson || prev.contactPerson,
       contactTitle: parsed.contactTitle || prev.contactTitle,
+      furigana: parsed.furigana || prev.furigana,
       phone: parsed.phone || prev.phone,
       email: parsed.email || prev.email,
       address: parsed.address || prev.address,
@@ -263,10 +265,14 @@ export default function ProjectRegistration() {
       clinicName,
       clinicType: department === '医療機関' ? 'クリニック' : department,
       address: formData.address.trim(),
+      postalCode: formData.postalCode.trim() || undefined,
       phone: formData.phone.trim(),
       email: formData.email.trim(),
       contactPerson,
       contactTitle: contactTitle || '担当者',
+      furigana: formData.furigana.trim() || undefined,
+      inquiryType: formData.inquiryTypes || undefined,
+      inquiryReason: formData.reason || undefined,
       memo: formData.memo.trim(),
       source: isFromEml ? 'HP資料請求・お問い合わせフォーム' : '直接受付',
       sourceDetail: formData.inquiryNo ? `反響番号: ${formData.inquiryNo}` : undefined,
@@ -285,8 +291,10 @@ export default function ProjectRegistration() {
         department: department === '医療機関' ? undefined : department,
         receiptComputer: formData.rececon.trim() || undefined,
         director: isDirector ? contactPerson : undefined,
+        furigana: formData.furigana.trim() || undefined,
         deviceType: inferDeviceTypeFromProducts(formData.products) || undefined,
         inquiryType: formData.inquiryTypes || undefined,
+        inquiryReason: formData.reason || undefined,
         purpose: formData.content
           ? formData.reason
             ? `${formData.reason}（${formData.content}）`
@@ -841,8 +849,8 @@ export default function ProjectRegistration() {
               </div>
             </div>
 
-            {/* 担当者・電話番号（2列） */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {/* 担当者・フリガナ・電話番号（3列） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
               <div>
                 <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
                   ご担当者名（院長・事務長など）
@@ -855,6 +863,20 @@ export default function ProjectRegistration() {
                   className="input-field"
                   style={{ width: '100%', minHeight: '44px' }} 
                   placeholder="例：山田 太郎 院長" 
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  フリガナ
+                </label>
+                <input 
+                  type="text" 
+                  name="furigana" 
+                  value={formData.furigana} 
+                  onChange={handleChange} 
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }} 
+                  placeholder="例：ヤマダ タロウ" 
                 />
               </div>
               <div>

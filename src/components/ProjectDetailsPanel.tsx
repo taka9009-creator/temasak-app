@@ -19,9 +19,15 @@ import {
 } from '../types';
 import type { Project, NextAction, SalesProgressStage, Activity, PipelineMap, IntroPhaseId } from '../types';
 import { differenceInDays, format } from 'date-fns';
-import { X, CheckCircle2, AlertTriangle, Sparkles, Save, Loader2, Zap, ExternalLink, Search, Calendar, Clock, Trophy, Edit2, Trash2, Plus, Bot, RotateCcw } from 'lucide-react';
+import { X, CheckCircle2, AlertTriangle, Sparkles, Save, Loader2, Zap, ExternalLink, Search, Calendar, Clock, Trophy, Edit2, Trash2, Plus, Bot, RotateCcw, Mail, Upload, RefreshCw } from 'lucide-react';
 import { useMasterData } from '../context/MasterDataContext';
 import { useProjects } from '../context/ProjectContext';
+import {
+  readInquiryEmlFiles,
+  parseInquiryEml,
+  buildProjectUpdatesFromEml,
+  SAMPLE_EML_3543_TEXT
+} from '../utils/emlParser';
 import ProjectProgressMap from './workflow/ProjectProgressMap';
 import {
   generateSummary,
@@ -163,12 +169,19 @@ export default function ProjectDetailsPanel({
   const [isAddingActivity, setIsAddingActivity] = useState(false);
   const [activityFeedbackMsg, setActivityFeedbackMsg] = useState<string | null>(null);
 
-  // 基本情報フォーム state（レセコン・法人番号・連携方法・メールを削除し、視覚的診療カレンダーを搭載）
+  // 基本情報フォーム state（EML項目・診療カレンダー含む完全版）
   const [clinicName, setClinicName] = useState('');
   const [receivedAt, setReceivedAt] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [contactTitle, setContactTitle] = useState('');
+  const [contactPerson, setContactPerson] = useState('');
+  const [furigana, setFurigana] = useState('');
+  const [product, setProduct] = useState('');
+  const [inquiryType, setInquiryType] = useState('');
+  const [inquiryReason, setInquiryReason] = useState('');
   const [clinicHours, setClinicHours] = useState('');
   const [closedDays, setClosedDays] = useState('');
   const [amHours, setAmHours] = useState('09:00〜12:30');
@@ -180,6 +193,11 @@ export default function ProjectDetailsPanel({
   const [probability, setProbability] = useState<string>('未設定');
   const [director, setDirector] = useState('');
   const [department, setDepartment] = useState('');
+
+  // EML直接取込ステート
+  const [isEmlDragOverPanel, setIsEmlDragOverPanel] = useState(false);
+  const [emlApplyMsg, setEmlApplyMsg] = useState<string | null>(null);
+  const panelEmlInputRef = React.useRef<HTMLInputElement>(null);
 
   // URL解析ステータス
   const [isExtractingUrl, setIsExtractingUrl] = useState(false);
@@ -209,6 +227,13 @@ export default function ProjectDetailsPanel({
     setWebsiteUrl(project.websiteUrl || '');
     setAddress(project.address || '');
     setPhone(project.phone || '');
+    setEmail(project.email || '');
+    setContactTitle(project.contactTitle || '');
+    setContactPerson(project.contactPerson || project.pipelineMap?.director || '');
+    setFurigana(project.furigana || project.pipelineMap?.furigana || '');
+    setProduct(project.product || project.pipelineMap?.deviceType || '');
+    setInquiryType(project.inquiryType || project.pipelineMap?.inquiryType || '');
+    setInquiryReason(project.inquiryReason || project.pipelineMap?.inquiryReason || project.pipelineMap?.purpose || '');
     setClinicHours(initHours);
     setClosedDays(initClosed);
     setAmHours(parsedSched.amHours);
@@ -216,7 +241,7 @@ export default function ProjectDetailsPanel({
     setWeeklyMatrix(parsedSched.matrix);
     setReservationSystem(project.pipelineMap?.receiptComputer || project.reservationSystem || '');
     setProbability(project.probability || '未設定');
-    setDirector(project.pipelineMap?.director || '');
+    setDirector(project.pipelineMap?.director || project.contactPerson || '');
     setDepartment(project.pipelineMap?.department || project.clinicType || '');
 
     // キャッシュレス導入状況の復元
@@ -323,13 +348,20 @@ export default function ProjectDetailsPanel({
     setClinicHours(`午前 ${newAm} / 午後 ${newPm}`);
   };
 
-  // 基本情報の一括保存ヘルパー
+  // 基本情報の一括保存ヘルパー（EML全項目対応）
   const saveBasicInfoToProject = (overrideFields?: Partial<{
     clinicName: string;
     receivedAt: string;
     websiteUrl: string;
     address: string;
     phone: string;
+    email: string;
+    contactTitle: string;
+    contactPerson: string;
+    furigana: string;
+    product: string;
+    inquiryType: string;
+    inquiryReason: string;
     clinicHours: string;
     closedDays: string;
     reservationSystem: string;
@@ -343,11 +375,18 @@ export default function ProjectDetailsPanel({
     const nextWebsiteUrl = overrideFields?.websiteUrl ?? websiteUrl;
     const nextAddress = overrideFields?.address ?? address;
     const nextPhone = overrideFields?.phone ?? phone;
+    const nextEmail = overrideFields?.email ?? email;
+    const nextTitle = overrideFields?.contactTitle ?? contactTitle;
+    const nextPerson = overrideFields?.contactPerson ?? contactPerson;
+    const nextFurigana = overrideFields?.furigana ?? furigana;
+    const nextProduct = overrideFields?.product ?? product;
+    const nextInqType = overrideFields?.inquiryType ?? inquiryType;
+    const nextInqReason = overrideFields?.inquiryReason ?? inquiryReason;
     const nextClinicHours = overrideFields?.clinicHours ?? clinicHours;
     const nextClosedDays = overrideFields?.closedDays ?? closedDays;
     const nextReservation = overrideFields?.reservationSystem ?? reservationSystem;
     const nextProb = overrideFields?.probability ?? probability;
-    const nextDirector = overrideFields?.director ?? director;
+    const nextDirector = overrideFields?.director ?? director ?? nextPerson;
     const nextDept = overrideFields?.department ?? department;
 
     onUpdateProject(project.id, {
@@ -356,6 +395,13 @@ export default function ProjectDetailsPanel({
       websiteUrl: nextWebsiteUrl,
       address: nextAddress,
       phone: nextPhone,
+      email: nextEmail,
+      contactTitle: nextTitle,
+      contactPerson: nextPerson,
+      furigana: nextFurigana,
+      product: nextProduct,
+      inquiryType: nextInqType,
+      inquiryReason: nextInqReason,
       clinicHours: nextClinicHours,
       closedDays: nextClosedDays,
       reservationSystem: nextReservation,
@@ -364,13 +410,60 @@ export default function ProjectDetailsPanel({
       pipelineMap: {
         ...project.pipelineMap,
         director: nextDirector,
+        furigana: nextFurigana,
         department: nextDept,
-        receiptComputer: nextReservation
+        receiptComputer: nextReservation,
+        deviceType: nextProduct,
+        inquiryType: nextInqType,
+        inquiryReason: nextInqReason
       }
     });
 
     setSaveSuccessFlag(true);
     setTimeout(() => setSaveSuccessFlag(false), 3000);
+  };
+
+  // EMLファイルをこの案件の基本情報に直接反映するハンドラ
+  const handleApplyEmlInPanel = async (fileOrText: File | string) => {
+    try {
+      let parsed;
+      if (typeof fileOrText === 'string') {
+        parsed = parseInquiryEml(fileOrText);
+      } else {
+        const results = await readInquiryEmlFiles([fileOrText]);
+        parsed = results[0];
+      }
+      if (!parsed) return;
+
+      const updates = buildProjectUpdatesFromEml(project, parsed);
+      if (onUpdateProject) {
+        onUpdateProject(project.id, updates);
+      }
+
+      // ローカルstateも即時反映
+      if (updates.clinicName) setClinicName(updates.clinicName);
+      if (updates.receivedAt) setReceivedAt(updates.receivedAt);
+      if (updates.address) setAddress(updates.address);
+      if (updates.phone) setPhone(updates.phone);
+      if (updates.email) setEmail(updates.email);
+      if (updates.contactTitle) setContactTitle(updates.contactTitle);
+      if (updates.contactPerson) {
+        setContactPerson(updates.contactPerson);
+        setDirector(updates.contactPerson);
+      }
+      if (updates.furigana) setFurigana(updates.furigana);
+      if (updates.product) setProduct(updates.product);
+      if (updates.inquiryType) setInquiryType(updates.inquiryType);
+      if (updates.inquiryReason) setInquiryReason(updates.inquiryReason);
+      if (updates.reservationSystem) setReservationSystem(updates.reservationSystem);
+
+      setEmlApplyMsg(`✅ EML「${parsed.clinicName || 'お問い合わせ'}」の内容を基本情報に反映しました！`);
+      setTimeout(() => setEmlApplyMsg(null), 4000);
+    } catch (e) {
+      console.error('EML apply error in panel:', e);
+      setEmlApplyMsg('❌ EMLの解析・反映に失敗しました。');
+      setTimeout(() => setEmlApplyMsg(null), 4000);
+    }
   };
 
   // URLから実サイトをAI解析して自動入力＆カレンダー反映＆即時保存
@@ -1440,7 +1533,95 @@ ${(project.activities || []).map(a => {
                 </div>
               </div>
 
-              {/* 基本情報フィールド（名称・反響日・住所・電話番号・院長・診療科目・レセコン：入力確定時に自動保存） */}
+              {/* 📧 EMLお問い合わせメール取込（既存案件の基本情報へ即時反映） */}
+              <div
+                onDragOver={e => {
+                  e.preventDefault();
+                  setIsEmlDragOverPanel(true);
+                }}
+                onDragLeave={() => setIsEmlDragOverPanel(false)}
+                onDrop={e => {
+                  e.preventDefault();
+                  setIsEmlDragOverPanel(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) handleApplyEmlInPanel(file);
+                }}
+                style={{
+                  backgroundColor: isEmlDragOverPanel ? '#dbeafe' : '#eff6ff',
+                  border: `2px ${isEmlDragOverPanel ? 'solid' : 'dashed'} #3b82f6`,
+                  borderRadius: '0.65rem',
+                  padding: '0.85rem 1rem',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.45rem',
+                  transition: 'background-color 0.15s ease'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Mail size={16} /> 📧 お問い合わせメール（EML）からこの案件の基本情報を更新
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyEmlInPanel(SAMPLE_EML_3543_TEXT)}
+                      style={{
+                        padding: '0.3rem 0.65rem',
+                        borderRadius: '0.4rem',
+                        border: '1px solid #93c5fd',
+                        backgroundColor: '#ffffff',
+                        color: '#1d4ed8',
+                        fontSize: '0.74rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💡 サンプル[3543]読込
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => panelEmlInputRef.current?.click()}
+                      style={{
+                        padding: '0.32rem 0.75rem',
+                        borderRadius: '0.4rem',
+                        border: 'none',
+                        backgroundColor: '#2563eb',
+                        color: '#ffffff',
+                        fontSize: '0.76rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                      }}
+                    >
+                      <Upload size={13} /> EMLを選択
+                    </button>
+                    <input
+                      ref={panelEmlInputRef}
+                      type="file"
+                      accept=".eml,.txt,message/rfc822,text/plain"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) handleApplyEmlInPanel(file);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#1d4ed8' }}>
+                  .emlファイルをここにドロップすると、役職・担当者名・フリガナ・反響日・メール・レセコン・住所・商材・種別・理由を自動で反映・保存します。
+                </div>
+                {emlApplyMsg && (
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#065f46', backgroundColor: '#dcfce7', padding: '0.35rem 0.65rem', borderRadius: '0.4rem' }}>
+                    {emlApplyMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* 基本情報フィールド（名称・役職・担当者・フリガナ・反響日・メール・住所・レセコン・商材・種別・理由：入力確定時に自動保存） */}
               <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
                 <div className="two-col-grid" style={{ fontSize: '0.875rem', gap: '0.75rem' }}>
                   <div>
@@ -1463,16 +1644,56 @@ ${(project.activities || []).map(a => {
                       onBlur={e => saveBasicInfoToProject({ receivedAt: e.target.value })}
                     />
                   </div>
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <strong>📍 住所:</strong>
+
+                  <div>
+                    <strong>👔 ご担当役職:</strong>
                     <input
                       type="text"
                       className="mock-input"
-                      value={address}
-                      onChange={e => setAddress(e.target.value)}
-                      onBlur={e => saveBasicInfoToProject({ address: e.target.value })}
+                      value={contactTitle}
+                      onChange={e => setContactTitle(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ contactTitle: e.target.value })}
+                      placeholder="例: 院長 / 理事長 / 事務長 / 薬局長"
                     />
                   </div>
+                  <div>
+                    <strong>👤 ご担当者名:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={contactPerson}
+                      onChange={e => {
+                        setContactPerson(e.target.value);
+                        setDirector(e.target.value);
+                      }}
+                      onBlur={e => saveBasicInfoToProject({ contactPerson: e.target.value, director: e.target.value })}
+                      placeholder="例: 網谷 誠"
+                    />
+                  </div>
+
+                  <div>
+                    <strong>🔤 フリガナ:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={furigana}
+                      onChange={e => setFurigana(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ furigana: e.target.value })}
+                      placeholder="例: アミタニ マコト"
+                    />
+                  </div>
+                  <div>
+                    <strong>✉️ メールアドレス:</strong>
+                    <input
+                      type="email"
+                      className="mock-input"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ email: e.target.value })}
+                      placeholder="例: info@clinic.jp"
+                    />
+                  </div>
+
                   <div>
                     <strong>📞 電話番号:</strong>
                     <input
@@ -1485,43 +1706,81 @@ ${(project.activities || []).map(a => {
                     />
                   </div>
                   <div>
-                    <strong>👨‍⚕️ 院長:</strong>
-                    <input
-                      type="text"
-                      className="mock-input"
-                      value={director}
-                      onChange={e => setDirector(e.target.value)}
-                      onBlur={e => saveBasicInfoToProject({ director: e.target.value })}
-                      placeholder="例: 鈴木 太郎 先生"
-                    />
-                  </div>
-                  <div>
-                    <strong>🏥 診療科目:</strong>
-                    <input
-                      type="text"
-                      className="mock-input"
-                      value={department}
-                      onChange={e => setDepartment(e.target.value)}
-                      onBlur={e => saveBasicInfoToProject({ department: e.target.value })}
-                      placeholder="例: 内科・消化器内科"
-                    />
-                  </div>
-                  <div>
-                    <strong>🖥️ レセコン:</strong>
+                    <strong>🖥️ 電子カルテ / レセコン:</strong>
                     <input
                       type="text"
                       className="mock-input"
                       value={reservationSystem}
                       onChange={e => setReservationSystem(e.target.value)}
                       onBlur={e => saveBasicInfoToProject({ reservationSystem: e.target.value })}
-                      placeholder="例: ORCA / Medicom / PHC / 富士通 / 島津 等"
+                      placeholder="例: アニコムレセプター / ORCA / Medicom 等"
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <strong>📍 住所:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={address}
+                      onChange={e => setAddress(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ address: e.target.value })}
+                      placeholder="例: 北海道札幌市中央区宮の森四条5-3-25"
+                    />
+                  </div>
+
+                  <div>
+                    <strong>🛒 お問い合わせ商材:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={product}
+                      onChange={e => setProduct(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ product: e.target.value })}
+                      placeholder="例: テマサックPro スタンドタイプ,テマサックPro カウンタータイプ"
+                    />
+                  </div>
+                  <div>
+                    <strong>🏷️ お問い合わせ種別:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={inquiryType}
+                      onChange={e => setInquiryType(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ inquiryType: e.target.value })}
+                      placeholder="例: 資料請求,その他ご相談/質問"
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <strong>💡 お問い合わせ理由:</strong>
+                    <textarea
+                      rows={2}
+                      className="mock-input"
+                      style={{ width: '100%', resize: 'vertical' }}
+                      value={inquiryReason}
+                      onChange={e => setInquiryReason(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ inquiryReason: e.target.value })}
+                      placeholder="例: 業務の効率化（人員不足の為セミセルフレジを検討。実際の使用感を知りたい）"
+                    />
+                  </div>
+
+                  <div>
+                    <strong>🏥 診療科目（区分）:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={department}
+                      onChange={e => setDepartment(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ department: e.target.value })}
+                      placeholder="例: 動物病院 / 内科 / 歯科"
                     />
                   </div>
                 </div>
 
                 <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                    💡 各項目は入力後（フォーカス外れ時）およびカレンダー操作時に自動保存されます
+                    💡 各項目は入力後（フォーカス外れ時）およびカレンダー・EML操作時に自動保存されます
                   </span>
                   <button
                     type="button"

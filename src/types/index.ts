@@ -132,6 +132,7 @@ export interface PipelineMap {
   // 基本情報拡張
   corpId?: string; // 法人番号
   director?: string; // 院長
+  furigana?: string; // 院長・担当者フリガナ
   receiptComputer?: string; // レセコン
   integrationMethod?: string; // 連携方法
   department?: string; // 診療科目
@@ -155,6 +156,7 @@ export interface PipelineMap {
   bmposSpecDedicatedCheck?: boolean; // STEP 7: 所有PCスペック確認（BM-POS専用機・他ソフト相乗り不可）
 
   inquiryType?: string; // 問合種別
+  inquiryReason?: string; // お問い合わせ理由
   purpose?: string; // 導入目的
 
   // PDF Page 6-7 & Page 10: デジタル化AI導入補助金 ＆ KIZASHI（kz）申請・公的書類3点＋GbizID・2回支払い管理
@@ -779,10 +781,14 @@ export interface Project {
   clinicName: string;
   clinicType: string;
   address: string;
+  postalCode?: string; // 郵便番号
   phone: string;
   email: string;
   contactPerson: string;
   contactTitle: string;
+  furigana?: string; // ご担当者・院長フリガナ
+  inquiryType?: string; // お問い合わせ種別
+  inquiryReason?: string; // お問い合わせ理由
   memo: string;
   source: string;
   sourceDetail?: string; // 紹介元など

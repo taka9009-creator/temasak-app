@@ -392,21 +392,28 @@ export function buildProjectUpdatesFromEml(existing: Project, parsed: ParsedInqu
   }
 
   return {
-    email: parsed.email || existing.email,
-    contactPerson: parsed.contactPerson || existing.contactPerson,
     contactTitle: parsed.contactTitle || existing.contactTitle,
+    contactPerson: parsed.contactPerson || existing.contactPerson,
+    furigana: parsed.furigana || existing.furigana,
+    email: parsed.email || existing.email,
     phone: parsed.phone || existing.phone,
     address: parsed.address || existing.address,
+    postalCode: parsed.postalCode || existing.postalCode,
+    receivedAt: existing.receivedAt || parsed.receivedAt,
     reservationSystem: parsed.rececon || existing.reservationSystem,
     product: parsed.products ? `テマサック（${parsed.products}）` : existing.product,
+    inquiryType: parsed.inquiryTypes || existing.inquiryType,
+    inquiryReason: parsed.reason || existing.inquiryReason,
     sourceDetail: existing.sourceDetail || (parsed.inquiryNo ? `反響番号: ${parsed.inquiryNo}` : undefined),
     memo: nextMemo,
     pipelineMap: {
       ...(existing.pipelineMap || {}),
       ...(isDirector && parsed.contactPerson ? { director: parsed.contactPerson } : {}),
+      ...(parsed.furigana ? { furigana: parsed.furigana } : {}),
       ...(parsed.rececon ? { receiptComputer: parsed.rececon } : {}),
       ...(deviceType ? { deviceType } : {}),
       ...(parsed.inquiryTypes ? { inquiryType: parsed.inquiryTypes } : {}),
+      ...(parsed.reason ? { inquiryReason: parsed.reason } : {}),
       ...(purposeText ? { purpose: purposeText } : {})
     }
   };
@@ -430,10 +437,14 @@ export function createProjectAndActionFromEml(
     clinicName,
     clinicType: department === '医療機関' ? 'クリニック' : department,
     address: parsed.address.trim(),
+    postalCode: parsed.postalCode || undefined,
     phone: parsed.phone.trim(),
     email: parsed.email.trim(),
     contactPerson: parsed.contactPerson.trim(),
     contactTitle: parsed.contactTitle.trim() || '担当者',
+    furigana: parsed.furigana || undefined,
+    inquiryType: parsed.inquiryTypes || undefined,
+    inquiryReason: parsed.reason || undefined,
     memo: formatEmlMemo(parsed),
     source: 'HP資料請求・お問い合わせフォーム',
     sourceDetail: parsed.inquiryNo ? `反響番号: ${parsed.inquiryNo}` : undefined,
@@ -460,8 +471,10 @@ export function createProjectAndActionFromEml(
       department: department === '医療機関' ? undefined : department,
       receiptComputer: parsed.rececon.trim() || undefined,
       director: isDirector ? parsed.contactPerson.trim() : undefined,
+      furigana: parsed.furigana || undefined,
       deviceType: inferDeviceTypeFromProducts(parsed.products) || undefined,
       inquiryType: parsed.inquiryTypes || undefined,
+      inquiryReason: parsed.reason || undefined,
       purpose: parsed.content
         ? parsed.reason
           ? `${parsed.reason}（${parsed.content}）`

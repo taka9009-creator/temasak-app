@@ -84,11 +84,24 @@ function normalizeLoadedProject(p: Project): Project {
   if (p.id === 'roster-5057') {
     return {
       ...p,
-      email: p.email || 'amitani-ah@wf6.so-net.ne.jp',
+      contactTitle: p.contactTitle || '院長',
       contactPerson: !p.contactPerson || p.contactPerson === '院長先生 / 事務長様' ? '網谷誠' : p.contactPerson,
+      furigana: p.furigana || '',
+      email: p.email || 'amitani-ah@wf6.so-net.ne.jp',
+      phone: p.phone || '011-215-7881',
+      address: p.address || '064-0954 北海道札幌市中央区宮の森四条5-3-25',
+      receivedAt: p.receivedAt || '2026-08-30',
       reservationSystem: p.reservationSystem || 'アニコムレセプター',
+      product:
+        p.product && p.product !== 'テマサック自動精算機'
+          ? p.product
+          : 'テマサックPro スタンドタイプ / テマサックPro カウンタータイプ',
+      inquiryType: p.inquiryType || '資料請求,その他ご相談/質問',
+      inquiryReason: p.inquiryReason || '業務の効率化',
       pipelineMap: {
         ...(p.pipelineMap || {}),
+        director: '網谷誠',
+        furigana: p.pipelineMap?.furigana || '',
         receiptComputer: p.pipelineMap?.receiptComputer || 'アニコムレセプター',
         deviceType:
           !p.pipelineMap?.deviceType || p.pipelineMap.deviceType === 'テマサック (標準モデル)'
@@ -98,6 +111,7 @@ function normalizeLoadedProject(p: Project): Project {
           !p.pipelineMap?.inquiryType || p.pipelineMap.inquiryType === '新規反響'
             ? '資料請求,その他ご相談/質問'
             : p.pipelineMap.inquiryType,
+        inquiryReason: p.pipelineMap?.inquiryReason || '業務の効率化',
         purpose:
           !p.pipelineMap?.purpose || p.pipelineMap.purpose === '受付会計の待ち時間短縮・締め作業効率化'
             ? '業務の効率化（人員不足の為セミセルフレジを検討・実際の使用感を知りたい）'
@@ -105,7 +119,31 @@ function normalizeLoadedProject(p: Project): Project {
       }
     };
   }
-  return p;
+
+  // 既存案件の基本情報相互補完（contactPerson ⇔ director, reservationSystem ⇔ receiptComputer など）
+  const syncedPerson = p.contactPerson || p.pipelineMap?.director || '';
+  const syncedDirector = p.pipelineMap?.director || syncedPerson;
+  const syncedRececon = p.reservationSystem || p.pipelineMap?.receiptComputer || '';
+  const syncedInqType = p.inquiryType || p.pipelineMap?.inquiryType || '';
+  const syncedInqReason = p.inquiryReason || p.pipelineMap?.inquiryReason || '';
+  const syncedFurigana = p.furigana || p.pipelineMap?.furigana || '';
+
+  return {
+    ...p,
+    contactPerson: syncedPerson,
+    reservationSystem: syncedRececon,
+    inquiryType: syncedInqType || undefined,
+    inquiryReason: syncedInqReason || undefined,
+    furigana: syncedFurigana || undefined,
+    pipelineMap: {
+      ...(p.pipelineMap || {}),
+      director: syncedDirector,
+      receiptComputer: syncedRececon,
+      inquiryType: syncedInqType || undefined,
+      inquiryReason: syncedInqReason || undefined,
+      furigana: syncedFurigana || undefined
+    }
+  };
 }
 
 interface ProjectContextType {
