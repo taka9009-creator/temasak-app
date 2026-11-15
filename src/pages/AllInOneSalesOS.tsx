@@ -2857,34 +2857,6 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       {callSt.label}
                     </span>
 
-                    {/* 住所バッジ（クリックでGoogleマップ検索） */}
-                    {(project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : '')) && (
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : ''))}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Googleマップで住所を確認"
-                        style={{
-                          backgroundColor: '#eff6ff',
-                          color: '#1d4ed8',
-                          border: '1px solid #bfdbfe',
-                          fontSize: '0.75rem',
-                          fontWeight: 700,
-                          padding: '0.15rem 0.55rem',
-                          borderRadius: '0.35rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '0.2rem',
-                          textDecoration: 'none',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        <MapPin size={12} color="#2563eb" style={{ flexShrink: 0 }} />
-                        <span>{project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : '')}</span>
-                      </a>
-                    )}
-
                     <span style={{
                       backgroundColor: '#eef2ff',
                       color: '#4338ca',
