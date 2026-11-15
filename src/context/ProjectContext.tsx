@@ -82,11 +82,12 @@ function normalizeLoadedProject(p: Project): Project {
     };
   }
   if (p.id === 'roster-5057') {
+    const amiFurigana = p.furigana || p.pipelineMap?.furigana || 'アミタニ マコト';
     return {
       ...p,
       contactTitle: p.contactTitle || '院長',
       contactPerson: !p.contactPerson || p.contactPerson === '院長先生 / 事務長様' ? '網谷誠' : p.contactPerson,
-      furigana: p.furigana || '',
+      furigana: amiFurigana,
       email: p.email || 'amitani-ah@wf6.so-net.ne.jp',
       phone: p.phone || '011-215-7881',
       address: p.address || '064-0954 北海道札幌市中央区宮の森四条5-3-25',
@@ -101,7 +102,7 @@ function normalizeLoadedProject(p: Project): Project {
       pipelineMap: {
         ...(p.pipelineMap || {}),
         director: '網谷誠',
-        furigana: p.pipelineMap?.furigana || '',
+        furigana: amiFurigana,
         receiptComputer: p.pipelineMap?.receiptComputer || 'アニコムレセプター',
         deviceType:
           !p.pipelineMap?.deviceType || p.pipelineMap.deviceType === 'テマサック (標準モデル)'
@@ -126,7 +127,10 @@ function normalizeLoadedProject(p: Project): Project {
   const syncedRececon = p.reservationSystem || p.pipelineMap?.receiptComputer || '';
   const syncedInqType = p.inquiryType || p.pipelineMap?.inquiryType || '';
   const syncedInqReason = p.inquiryReason || p.pipelineMap?.inquiryReason || '';
-  const syncedFurigana = p.furigana || p.pipelineMap?.furigana || '';
+  let syncedFurigana = p.furigana || p.pipelineMap?.furigana || '';
+  if (!syncedFurigana && (syncedPerson.includes('網谷') || syncedDirector.includes('網谷') || (p.clinicName || '').includes('あみたに'))) {
+    syncedFurigana = 'アミタニ マコト';
+  }
 
   return {
     ...p,
@@ -329,6 +333,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           email: p.email || '',
           contactPerson: p.contactPerson || p.contact_person || '',
           contactTitle: p.contactTitle || p.contact_title || '',
+          furigana: p.furigana || p.pipelineMap?.furigana || (docSnap.id === 'roster-5057' ? 'アミタニ マコト' : ''),
+          inquiryType: p.inquiryType || p.inquiry_type || p.pipelineMap?.inquiryType || '',
+          inquiryReason: p.inquiryReason || p.inquiry_reason || p.pipelineMap?.inquiryReason || '',
           source: p.source || '',
           sourceDetail: p.sourceDetail,
           receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
@@ -409,6 +416,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               closedDays: existing.closedDays || rosterProj.closedDays,
               websiteUrl: existing.websiteUrl || rosterProj.websiteUrl,
               reservationSystem: existing.reservationSystem || rosterProj.reservationSystem,
+              furigana: existing.furigana || rosterProj.furigana || (rosterProj.id === 'roster-5057' ? 'アミタニ マコト' : ''),
+              inquiryType: existing.inquiryType || rosterProj.inquiryType || '',
+              inquiryReason: existing.inquiryReason || rosterProj.inquiryReason || '',
               status: isFirstRecoverySync ? rosterProj.status : existing.status,
               lostReason: isFirstRecoverySync ? rosterProj.lostReason : (existing.lostReason || rosterProj.lostReason),
               probability: isFirstRecoverySync ? rosterProj.probability : existing.probability,

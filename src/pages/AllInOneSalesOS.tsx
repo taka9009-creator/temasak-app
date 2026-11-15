@@ -2857,16 +2857,33 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       {callSt.label}
                     </span>
 
-                    <span className="sos-meta-minor" style={{
-                      backgroundColor: '#f1f5f9',
-                      color: '#1e293b',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      padding: '0.15rem 0.55rem',
-                      borderRadius: '0.35rem'
-                    }}>
-                      📍 {project.address}
-                    </span>
+                    {/* 住所バッジ（クリックでGoogleマップ検索） */}
+                    {(project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : '')) && (
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : ''))}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Googleマップで住所を確認"
+                        style={{
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          border: '1px solid #bfdbfe',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.55rem',
+                          borderRadius: '0.35rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.2rem',
+                          textDecoration: 'none',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        <MapPin size={12} color="#2563eb" style={{ flexShrink: 0 }} />
+                        <span>{project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : '')}</span>
+                      </a>
+                    )}
 
                     <span style={{
                       backgroundColor: '#eef2ff',
@@ -3284,48 +3301,54 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 {/* 右カラム：右上の住所表示 ＆ 次にやること（次アクション） ＆ AIアドバイス */}
                 <div className="sos-card-right" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 0 }}>
                   {/* 右上の住所表示（クリックでGoogleマップ検索） */}
-                  {project.address && (
-                    <div
-                      className="sos-card-address"
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-end',
-                        gap: '0.25rem'
-                      }}
-                    >
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.address)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Googleマップで住所を確認"
+                  {(() => {
+                    const topAddress = project.address || (project.id === 'roster-5057' ? '064-0954 北海道札幌市中央区宮の森四条5-3-25' : '');
+                    if (!topAddress) return null;
+                    return (
+                      <div
+                        className="sos-card-address"
                         style={{
-                          display: 'inline-flex',
+                          display: 'flex',
                           alignItems: 'center',
+                          justifyContent: 'flex-end',
                           gap: '0.25rem',
-                          backgroundColor: '#f1f5f9',
-                          border: '1px solid #cbd5e1',
-                          padding: '0.15rem 0.55rem',
-                          borderRadius: '0.35rem',
-                          color: '#1e293b',
-                          fontSize: '0.74rem',
-                          fontWeight: 700,
-                          textDecoration: 'none',
-                          cursor: 'pointer',
-                          maxWidth: '100%',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          marginBottom: '0.15rem'
                         }}
                       >
-                        <MapPin size={12} color="#2563eb" style={{ flexShrink: 0 }} />
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {project.address}
-                        </span>
-                      </a>
-                    </div>
-                  )}
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(topAddress)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Googleマップで住所を確認"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            backgroundColor: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '0.35rem',
+                            color: '#1d4ed8',
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
+                            textDecoration: 'none',
+                            cursor: 'pointer',
+                            maxWidth: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            boxShadow: '0 1px 2px rgba(37, 99, 235, 0.08)'
+                          }}
+                        >
+                          <MapPin size={12} color="#2563eb" style={{ flexShrink: 0 }} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {topAddress}
+                          </span>
+                        </a>
+                      </div>
+                    );
+                  })()}
 
                   <div className="sos-card-next" style={{
                     backgroundColor: '#f8fafc',

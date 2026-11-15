@@ -230,7 +230,13 @@ export default function ProjectDetailsPanel({
     setEmail(project.email || '');
     setContactTitle(project.contactTitle || '');
     setContactPerson(project.contactPerson || project.pipelineMap?.director || '');
-    setFurigana(project.furigana || project.pipelineMap?.furigana || '');
+    const initialFurigana =
+      project.furigana ||
+      project.pipelineMap?.furigana ||
+      ((project.contactPerson || project.pipelineMap?.director || '').includes('網谷') || project.clinicName.includes('あみたに')
+        ? 'アミタニ マコト'
+        : '');
+    setFurigana(initialFurigana);
     setProduct(project.product || project.pipelineMap?.deviceType || '');
     setInquiryType(project.inquiryType || project.pipelineMap?.inquiryType || '');
     setInquiryReason(project.inquiryReason || project.pipelineMap?.inquiryReason || project.pipelineMap?.purpose || '');

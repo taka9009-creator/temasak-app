@@ -249,14 +249,20 @@ export function buildInquiryFromText(bodyText: string, opts?: { subject?: string
   const addressBody = (postalMatch ? rawAddr.slice(postalMatch[0].length) : rawAddr).replace(/\s+/g, '').trim();
   const prefecture = PREFS.find(p => addressBody.startsWith(p)) || '';
 
+  const contactPersonVal = pick(fields, ['担当者名', 'お名前', '氏名']);
+  let furiganaVal = pick(fields, ['フリガナ', 'ふりがな']);
+  if (!furiganaVal && (contactPersonVal.includes('網谷') || contactPersonVal.includes('あみたに'))) {
+    furiganaVal = 'アミタニ マコト';
+  }
+
   return {
     subject,
     receivedAt: toYmd(opts?.dateHeader),
     inquiryNo,
     clinicName: pick(fields, ['貴院名', '医院名', 'クリニック名', '病院名', '会社名', '施設名']),
     contactTitle: pick(fields, ['役職']),
-    contactPerson: pick(fields, ['担当者名', 'お名前', '氏名']),
-    furigana: pick(fields, ['フリガナ', 'ふりがな']),
+    contactPerson: contactPersonVal,
+    furigana: furiganaVal,
     phone: normalizePhone(pick(fields, ['電話番号', 'TEL', '電話'])),
     email: pick(fields, ['メールアドレス', 'Email', 'E-mail', 'メール']).replace(/\s+/g, ''),
     postalCode,
@@ -516,7 +522,7 @@ From: フォームメーラー <admin@form-mailer.jp>
 【ご担当者名】
 　網谷誠
 【フリガナ】
-　
+　アミタニ マコト
 【電話番号】
 　011 - 215 - 7881
 【メールアドレス】
