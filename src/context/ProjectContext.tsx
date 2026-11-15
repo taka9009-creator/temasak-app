@@ -30,6 +30,34 @@ import { useAuth } from './AuthContext';
 const LOCAL_PROJECTS_KEY = 'temasak_os_projects_recovered_v2';
 const LOCAL_ACTIONS_KEY = 'temasak_os_actions_recovered_v2';
 const CLOUD_RECOVERED_FLAG = 'temasak_cloud_recovered_v2';
+const DELETED_PROJECT_IDS_KEY = 'temasak_deleted_project_ids_v1';
+
+function getDeletedProjectIds(): Set<string> {
+  try {
+    const saved = localStorage.getItem(DELETED_PROJECT_IDS_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed.filter((x): x is string => typeof x === 'string'));
+      }
+    }
+  } catch (e) {}
+  return new Set();
+}
+
+function addDeletedProjectId(id: string): void {
+  try {
+    const set = getDeletedProjectIds();
+    set.add(id);
+    localStorage.setItem(DELETED_PROJECT_IDS_KEY, JSON.stringify(Array.from(set)));
+  } catch (e) {}
+}
+
+function clearDeletedProjectIds(): void {
+  try {
+    localStorage.removeItem(DELETED_PROJECT_IDS_KEY);
+  } catch (e) {}
+}
 
 // 本番有効な案件IDかどうかの判定（旧サンプル12件やテスト用UUIDを除外）
 function isValidProductionProjectId(id: string | undefined): boolean {
@@ -45,6 +73,7 @@ interface ProjectContextType {
   addProject: (newProject: Project, initialAction?: NextAction) => void;
   addProjectsBulk: (newProjects: Project[], newActions: NextAction[]) => void;
   updateProject: (projectId: string, updates: Partial<Project>) => void;
+  deleteProject: (projectId: string) => void;
   renameProjectStatus: (oldStatus: string, newStatus: string) => void;
   postponeAction: (actionId: string, days: number) => void;
   recordQuickCallResult: (
@@ -69,35 +98,41 @@ const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>(() => {
+    const deletedIds = getDeletedProjectIds();
     try {
       const saved = localStorage.getItem(LOCAL_PROJECTS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const validOnly = parsed.filter((p: Project) => isValidProductionProjectId(p?.id));
-          if (validOnly.length >= 42) return validOnly;
+          const validOnly = parsed.filter(
+            (p: Project) => isValidProductionProjectId(p?.id) && !deletedIds.has(p.id)
+          );
+          if (validOnly.length > 0) return validOnly;
         }
       }
     } catch (e) {
       console.error('Failed to load local projects:', e);
     }
-    return buildRoster42Dataset().projects;
+    return buildRoster42Dataset().projects.filter(p => !deletedIds.has(p.id));
   });
 
   const [actions, setActions] = useState<NextAction[]>(() => {
+    const deletedIds = getDeletedProjectIds();
     try {
       const saved = localStorage.getItem(LOCAL_ACTIONS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const validOnly = parsed.filter((a: NextAction) => isValidProductionProjectId(a?.projectId));
+          const validOnly = parsed.filter(
+            (a: NextAction) => isValidProductionProjectId(a?.projectId) && !deletedIds.has(a.projectId)
+          );
           if (validOnly.length > 0) return validOnly;
         }
       }
     } catch (e) {
       console.error('Failed to load local actions:', e);
     }
-    return buildRoster42Dataset().actions;
+    return buildRoster42Dataset().actions.filter(a => !deletedIds.has(a.projectId));
   });
 
   const { getRulesForStatus, kanbanColumns } = useWorkflow();
@@ -187,11 +222,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const projectsQuery = query(collection(db, 'projects'));
     const unsubscribeProjects = onSnapshot(projectsQuery, (snapshot) => {
-      // 1. 旧サンプル案件（IDが roster- / paste-proj- / prod- 以外）をFirestoreから自動削除
+      const deletedIds = getDeletedProjectIds();
+      // 1. 旧サンプル案件（IDが roster- / paste-proj- / prod- 以外）および削除済み案件をFirestoreから除外
       const validDocs = snapshot.docs.filter(docSnap => {
-        if (!isValidProductionProjectId(docSnap.id)) {
+        if (!isValidProductionProjectId(docSnap.id) || deletedIds.has(docSnap.id)) {
           deleteDoc(doc(db, 'projects', docSnap.id)).catch(err =>
-            console.error('Failed to purge sample project:', err)
+            console.error('Failed to purge sample or deleted project:', err)
           );
           return false;
         }
@@ -264,6 +300,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const isFirstRecoverySync = localStorage.getItem(CLOUD_RECOVERED_FLAG) !== 'done';
 
       freshRoster.forEach(rosterProj => {
+        if (deletedIds.has(rosterProj.id)) return;
         const existing = loadedMap.get(rosterProj.id);
         if (!existing) {
           loadedMap.set(rosterProj.id, rosterProj);
@@ -328,13 +365,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     const actionsQuery = query(collection(db, 'actions'));
     const unsubscribeActions = onSnapshot(actionsQuery, (snapshot) => {
-      // 旧サンプルタスク（△△医院など）をFirestoreから自動削除
+      const deletedIds = getDeletedProjectIds();
+      // 旧サンプルタスク（△△医院など）および削除済み案件のタスクを除外
       const validActionDocs = snapshot.docs.filter(docSnap => {
         const a = docSnap.data();
         const pid = a.projectId || a.project_id || '';
-        if (!isValidProductionProjectId(pid)) {
+        if (!isValidProductionProjectId(pid) || deletedIds.has(pid)) {
           deleteDoc(doc(db, 'actions', docSnap.id)).catch(err =>
-            console.error('Failed to purge sample action:', err)
+            console.error('Failed to purge sample or deleted action:', err)
           );
           return false;
         }
@@ -360,6 +398,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       const freshActions = buildRoster42Dataset().actions;
       freshActions.forEach(rosterAct => {
+        if (deletedIds.has(rosterAct.projectId)) return;
         if (!loadedActionMap.has(rosterAct.id)) {
           loadedActionMap.set(rosterAct.id, rosterAct);
           saveActionToFirestore(rosterAct);
@@ -411,6 +450,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
    * 名簿初期42件のデータ状態に完全初期化（ローカル＋Firestoreクラウド両方）
    */
   const resetToRoster42 = () => {
+    clearDeletedProjectIds();
     const fresh = buildRoster42Dataset();
     setProjects(fresh.projects);
     setActions(fresh.actions);
@@ -1218,6 +1258,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  /**
+   * リストから案件（および関連アクション）を恒久削除（ローカル＋Firestore同期対応）
+   */
+  const deleteProject = (projectId: string) => {
+    addDeletedProjectId(projectId);
+    const targetActionIds = actions.filter(a => a.projectId === projectId).map(a => a.id);
+
+    setProjects(prev => prev.filter(p => p.id !== projectId));
+    setActions(prev => prev.filter(a => a.projectId !== projectId));
+
+    if (user && user.id !== 'demo-user-1') {
+      deleteDoc(doc(db, 'projects', projectId)).catch(err =>
+        console.error('Failed to delete project from Firestore:', err)
+      );
+      targetActionIds.forEach(actId => {
+        deleteDoc(doc(db, 'actions', actId)).catch(err =>
+          console.error('Failed to delete action from Firestore:', err)
+        );
+      });
+    }
+  };
+
   const postponeAction = async (actionId: string, days: number) => {
     setActions(prev =>
       prev.map(a => {
@@ -1292,6 +1354,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addProject,
       addProjectsBulk,
       updateProject,
+      deleteProject,
       renameProjectStatus,
       postponeAction,
       recordQuickCallResult,

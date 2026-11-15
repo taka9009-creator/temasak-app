@@ -4,7 +4,7 @@ import ProjectKanban from '../components/ProjectKanban';
 import ProjectDetailsPanel from '../components/ProjectDetailsPanel';
 import ProjectCalendar from '../components/ProjectCalendar';
 import { useProjects } from '../context/ProjectContext';
-import { LayoutList, KanbanSquare, Archive, CalendarDays, Search, X, RotateCcw } from 'lucide-react';
+import { LayoutList, KanbanSquare, Archive, CalendarDays, Search, X, RotateCcw, Trash2 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 import { SALES_PROGRESS_FLOW, normalizeProgressStage, isBtoBDealerProject } from '../types';
 import type { LostReasonType, Project } from '../types';
@@ -18,6 +18,7 @@ export default function ProjectManagement() {
     restoreArchivedProject,
     handleCompleteAction,
     updateProject,
+    deleteProject,
     postponeAction
   } = useProjects();
   const { kanbanColumns } = useWorkflow();
@@ -25,6 +26,16 @@ export default function ProjectManagement() {
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'archive' | 'calendar'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  const handleDeleteProject = (project: Project) => {
+    if (!window.confirm(`「${project.clinicName}」をリストから削除しますか？\n（※誤って削除した場合も、リセットボタンから初期42件に戻せます）`)) {
+      return;
+    }
+    if (selectedProjectId === project.id) {
+      setSelectedProjectId(null);
+    }
+    deleteProject(project.id);
+  };
 
   // 失注モーダル用ステート
   const [lostModalProjectId, setLostModalProjectId] = useState<string | null>(null);
@@ -166,6 +177,7 @@ export default function ProjectManagement() {
           projects={activeProjects}
           actions={actions}
           onProjectClick={(p) => setSelectedProjectId(p.id)}
+          onDeleteProject={handleDeleteProject}
         />
       )}
 
@@ -268,28 +280,52 @@ export default function ProjectManagement() {
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        restoreArchivedProject(p.id);
-                      }}
-                      style={{
-                        padding: '0.45rem 0.9rem',
-                        borderRadius: '0.5rem',
-                        border: '1px solid #2563eb',
-                        backgroundColor: '#eff6ff',
-                        color: '#1d4ed8',
-                        fontWeight: 800,
-                        fontSize: '0.8rem',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.35rem'
-                      }}
-                    >
-                      <RotateCcw size={14} /> 営業リストへ復元
-                    </button>
+                    <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          restoreArchivedProject(p.id);
+                        }}
+                        style={{
+                          padding: '0.45rem 0.9rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #2563eb',
+                          backgroundColor: '#eff6ff',
+                          color: '#1d4ed8',
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        <RotateCcw size={14} /> 営業リストへ復元
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteProject(p);
+                        }}
+                        style={{
+                          padding: '0.45rem 0.85rem',
+                          borderRadius: '0.5rem',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.35rem'
+                        }}
+                      >
+                        <Trash2 size={14} /> 削除
+                      </button>
+                    </div>
                   </div>
                 );
               })}

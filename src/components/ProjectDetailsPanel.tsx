@@ -21,6 +21,7 @@ import type { Project, NextAction, SalesProgressStage, Activity, PipelineMap, In
 import { differenceInDays, format } from 'date-fns';
 import { X, CheckCircle2, AlertTriangle, Sparkles, Save, Loader2, Zap, ExternalLink, Search, Calendar, Clock, Trophy, Edit2, Trash2, Plus, Bot, RotateCcw } from 'lucide-react';
 import { useMasterData } from '../context/MasterDataContext';
+import { useProjects } from '../context/ProjectContext';
 import ProjectProgressMap from './workflow/ProjectProgressMap';
 import {
   generateSummary,
@@ -151,6 +152,7 @@ export default function ProjectDetailsPanel({
   const [inlineAiSettings, setInlineAiSettings] = useState(getAISettings);
   const [promptSavedToast, setPromptSavedToast] = useState<string | null>(null);
   const { masterData } = useMasterData();
+  const { deleteProject } = useProjects();
 
   // 「これまでの活動」の修正・削除・新規追加用 state
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
@@ -162,6 +164,8 @@ export default function ProjectDetailsPanel({
   const [activityFeedbackMsg, setActivityFeedbackMsg] = useState<string | null>(null);
 
   // 基本情報フォーム state（レセコン・法人番号・連携方法・メールを削除し、視覚的診療カレンダーを搭載）
+  const [clinicName, setClinicName] = useState('');
+  const [receivedAt, setReceivedAt] = useState('');
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
@@ -200,6 +204,8 @@ export default function ProjectDetailsPanel({
     const initClosed = project.closedDays || '水曜・土曜午後・日曜・祝日';
     const parsedSched = parseScheduleFromStrings(initHours, initClosed);
 
+    setClinicName(project.clinicName || '');
+    setReceivedAt(project.receivedAt || '');
     setWebsiteUrl(project.websiteUrl || '');
     setAddress(project.address || '');
     setPhone(project.phone || '');
@@ -255,7 +261,11 @@ export default function ProjectDetailsPanel({
     setEmoneyStatus(pm.emoneyStatus || '');
     setQrStatus(pm.qrStatus || '');
     setReservationSystem(pm.receiptComputer || project.reservationSystem || '');
+    setClinicName(project.clinicName || '');
+    setReceivedAt(project.receivedAt || '');
   }, [
+    project?.clinicName,
+    project?.receivedAt,
     project?.probability,
     project?.reservationSystem,
     project?.pipelineMap?.receiptComputer,
@@ -315,6 +325,8 @@ export default function ProjectDetailsPanel({
 
   // 基本情報の一括保存ヘルパー
   const saveBasicInfoToProject = (overrideFields?: Partial<{
+    clinicName: string;
+    receivedAt: string;
     websiteUrl: string;
     address: string;
     phone: string;
@@ -326,6 +338,8 @@ export default function ProjectDetailsPanel({
     department: string;
   }>) => {
     if (!onUpdateProject) return;
+    const nextClinicName = overrideFields?.clinicName ?? clinicName;
+    const nextReceivedAt = overrideFields?.receivedAt ?? receivedAt;
     const nextWebsiteUrl = overrideFields?.websiteUrl ?? websiteUrl;
     const nextAddress = overrideFields?.address ?? address;
     const nextPhone = overrideFields?.phone ?? phone;
@@ -337,6 +351,8 @@ export default function ProjectDetailsPanel({
     const nextDept = overrideFields?.department ?? department;
 
     onUpdateProject(project.id, {
+      clinicName: nextClinicName.trim() || project.clinicName,
+      receivedAt: nextReceivedAt.trim() || project.receivedAt,
       websiteUrl: nextWebsiteUrl,
       address: nextAddress,
       phone: nextPhone,
@@ -551,7 +567,32 @@ ${(project.activities || []).map(a => {
             </h2>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.5rem' }}><X size={24} color="var(--text-muted)"/></button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`「${project.clinicName}」をリストから削除しますか？\n（※誤って削除した場合も、リセットボタンから初期42件に戻せます）`)) {
+                  deleteProject(project.id);
+                  onClose();
+                }
+              }}
+              title="この案件をリストから削除"
+              style={{
+                padding: '0.32rem 0.7rem',
+                borderRadius: '0.45rem',
+                border: '1px solid #fca5a5',
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem'
+              }}
+            >
+              <Trash2 size={14} /> 削除
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.25rem' }}><X size={24} color="var(--text-muted)"/></button>
           </div>
         </div>
 
@@ -1399,9 +1440,29 @@ ${(project.activities || []).map(a => {
                 </div>
               </div>
 
-              {/* 基本情報フィールド（住所・電話番号・院長・診療科目・予約システム：入力確定時に自動保存） */}
+              {/* 基本情報フィールド（名称・反響日・住所・電話番号・院長・診療科目・レセコン：入力確定時に自動保存） */}
               <div className="card" style={{ padding: '1rem', marginBottom: '1rem' }}>
                 <div className="two-col-grid" style={{ fontSize: '0.875rem', gap: '0.75rem' }}>
+                  <div>
+                    <strong>🏥 クリニック・企業名:</strong>
+                    <input
+                      type="text"
+                      className="mock-input"
+                      value={clinicName}
+                      onChange={e => setClinicName(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ clinicName: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <strong>📅 反響日:</strong>
+                    <input
+                      type="date"
+                      className="mock-input"
+                      value={receivedAt}
+                      onChange={e => setReceivedAt(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ receivedAt: e.target.value })}
+                    />
+                  </div>
                   <div style={{ gridColumn: '1 / -1' }}>
                     <strong>📍 住所:</strong>
                     <input

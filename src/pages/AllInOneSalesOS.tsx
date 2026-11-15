@@ -30,7 +30,9 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  EyeOff
+  EyeOff,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { useProjects } from '../context/ProjectContext';
@@ -77,6 +79,7 @@ export default function AllInOneSalesOS() {
     handleStatusChange,
     postponeAction,
     updateProject,
+    deleteProject,
     resetToRoster42
   } = useProjects();
 
@@ -101,19 +104,37 @@ export default function AllInOneSalesOS() {
   // ポイント履歴開閉状態
   const [isPtHistoryOpen, setIsPtHistoryOpen] = useState(false);
 
-  // カード表示密度（standard: 標準 / compact: まとめ表示）※スマホは初期値まとめ表示
+  // カード表示密度（standard: 標準 / compact: まとめ表示）※PC・スマホとも初期値まとめ表示
   const [cardDensity, setCardDensity] = useState<'standard' | 'compact'>(() => {
     try {
-      const saved = localStorage.getItem('temasak_card_density');
+      const saved = localStorage.getItem('temasak_card_density_v2');
       if (saved === 'standard' || saved === 'compact') return saved;
     } catch (e) {}
-    return typeof window !== 'undefined' && window.innerWidth <= 768 ? 'compact' : 'standard';
+    return 'compact';
   });
   const changeCardDensity = (d: 'standard' | 'compact') => {
     setCardDensity(d);
     try {
-      localStorage.setItem('temasak_card_density', d);
+      localStorage.setItem('temasak_card_density_v2', d);
     } catch (e) {}
+  };
+
+  // KPIカードグリッドの表示/折りたたみ状態
+  const [isKpiCardsOpen, setIsKpiCardsOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('temasak_show_kpi_cards');
+      if (saved !== null) return saved === 'true';
+    } catch (e) {}
+    return true;
+  });
+  const toggleKpiCardsOpen = () => {
+    setIsKpiCardsOpen(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('temasak_show_kpi_cards', String(next));
+      } catch (e) {}
+      return next;
+    });
   };
 
   // クリニック別ポイント制（配点ルール＆バッジ）の表示/非表示切り替え状態
@@ -201,6 +222,68 @@ export default function AllInOneSalesOS() {
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 3500);
+  };
+
+  // リストのインライン訂正用状態・ハンドラ
+  const [editingProject, setEditingProject] = useState<{
+    id: string;
+    clinicName: string;
+    address: string;
+    clinicType: string;
+    rececon: string;
+    phone: string;
+    director: string;
+    receivedAt: string;
+    salesRep: string;
+    memo: string;
+  } | null>(null);
+
+  const openQuickEdit = (p: Project) => {
+    setEditingProject({
+      id: p.id,
+      clinicName: p.clinicName || '',
+      address: p.address || '',
+      clinicType: p.clinicType || '',
+      rececon: p.pipelineMap?.receiptComputer || p.reservationSystem || '',
+      phone: p.phone || '',
+      director: p.pipelineMap?.director || p.contactPerson || '',
+      receivedAt: p.receivedAt || '',
+      salesRep: p.salesRep || '松浦 貴文',
+      memo: p.memo || ''
+    });
+  };
+
+  const handleSaveQuickEdit = (p: Project) => {
+    if (!editingProject || editingProject.id !== p.id) return;
+    const trimmedName = editingProject.clinicName.trim() || p.clinicName;
+    updateProject(p.id, {
+      clinicName: trimmedName,
+      address: editingProject.address.trim(),
+      clinicType: editingProject.clinicType.trim(),
+      reservationSystem: editingProject.rececon.trim(),
+      phone: editingProject.phone.trim(),
+      contactPerson: editingProject.director.trim(),
+      receivedAt: editingProject.receivedAt.trim() || p.receivedAt,
+      salesRep: editingProject.salesRep.trim() || p.salesRep,
+      memo: editingProject.memo,
+      pipelineMap: {
+        ...(p.pipelineMap || {}),
+        receiptComputer: editingProject.rececon.trim(),
+        director: editingProject.director.trim(),
+        department: editingProject.clinicType.trim()
+      }
+    });
+    setEditingProject(null);
+    triggerToast(`✏️ 「${trimmedName}」の登録情報を訂正しました`);
+  };
+
+  const handleDeleteFromList = (p: Project) => {
+    if (window.confirm(`「${p.clinicName}」をリストから削除しますか？\n（※誤って削除した場合も、右上のリセットボタンから初期42件に戻せます）`)) {
+      if (detailProjectId === p.id) setDetailProjectId(null);
+      if (editingProject?.id === p.id) setEditingProject(null);
+      deleteProject(p.id);
+      triggerToast(`🗑️ 「${p.clinicName}」をリストから削除しました`);
+    }
   };
 
   const addPoint = (clinicName: string, actionLabel: string, pts: number) => {
@@ -1437,45 +1520,69 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             </button>
           </div>
 
-          {kpiSegmentTab === 'clinic' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {kpiSegmentTab === 'clinic' ? (
+              <button
+                type="button"
+                onClick={() => setSegmentViewMode(segmentViewMode === 'clinic_only' ? 'split' : 'clinic_only')}
+                style={{
+                  padding: '0.28rem 0.75rem',
+                  borderRadius: '999px',
+                  border: segmentViewMode === 'clinic_only' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
+                  backgroundColor: segmentViewMode === 'clinic_only' ? '#1d4ed8' : '#ffffff',
+                  color: segmentViewMode === 'clinic_only' ? '#ffffff' : '#334155',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                {segmentViewMode === 'clinic_only' ? '✓ クリニックのみ表示中（全枠表示へ戻す）' : '🏥 クリニック枠のみ表示'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSegmentViewMode(segmentViewMode === 'btob_only' ? 'split' : 'btob_only')}
+                style={{
+                  padding: '0.28rem 0.75rem',
+                  borderRadius: '999px',
+                  border: segmentViewMode === 'btob_only' ? '1px solid #4338ca' : '1px solid #a5b4fc',
+                  backgroundColor: segmentViewMode === 'btob_only' ? '#4338ca' : '#ffffff',
+                  color: segmentViewMode === 'btob_only' ? '#ffffff' : '#3730a3',
+                  fontSize: '0.74rem',
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                {segmentViewMode === 'btob_only' ? '✓ BtoBリストのみ表示中（全枠表示へ戻す）' : '🏢 BtoB企業リストのみ表示'}
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => setSegmentViewMode(segmentViewMode === 'clinic_only' ? 'split' : 'clinic_only')}
+              onClick={toggleKpiCardsOpen}
+              title="KPIカード5枚の展開・折りたたみを切り替え"
               style={{
                 padding: '0.28rem 0.75rem',
                 borderRadius: '999px',
-                border: segmentViewMode === 'clinic_only' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-                backgroundColor: segmentViewMode === 'clinic_only' ? '#1d4ed8' : '#ffffff',
-                color: segmentViewMode === 'clinic_only' ? '#ffffff' : '#334155',
+                border: '1px solid #cbd5e1',
+                backgroundColor: isKpiCardsOpen ? '#ffffff' : '#0f172a',
+                color: isKpiCardsOpen ? '#334155' : '#ffffff',
                 fontSize: '0.74rem',
                 fontWeight: 800,
-                cursor: 'pointer'
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem'
               }}
             >
-              {segmentViewMode === 'clinic_only' ? '✓ クリニックのみ表示中（全枠表示へ戻す）' : '🏥 クリニック枠のみ表示'}
+              {isKpiCardsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              <span>{isKpiCardsOpen ? '📊 KPIカード: 折りたたみ' : '📊 KPIカード: 表示'}</span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setSegmentViewMode(segmentViewMode === 'btob_only' ? 'split' : 'btob_only')}
-              style={{
-                padding: '0.28rem 0.75rem',
-                borderRadius: '999px',
-                border: segmentViewMode === 'btob_only' ? '1px solid #4338ca' : '1px solid #a5b4fc',
-                backgroundColor: segmentViewMode === 'btob_only' ? '#4338ca' : '#ffffff',
-                color: segmentViewMode === 'btob_only' ? '#ffffff' : '#3730a3',
-                fontSize: '0.74rem',
-                fontWeight: 800,
-                cursor: 'pointer'
-              }}
-            >
-              {segmentViewMode === 'btob_only' ? '✓ BtoBリストのみ表示中（全枠表示へ戻す）' : '🏢 BtoB企業リストのみ表示'}
-            </button>
-          )}
+          </div>
         </div>
 
         {/* 2-A. 🏥 直販枠 KPI コンテンツ */}
-        {kpiSegmentTab === 'clinic' && (
+        {isKpiCardsOpen && kpiSegmentTab === 'clinic' && (
           <div className="sos-kpi-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -1603,7 +1710,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         )}
 
         {/* 2-B. 🏢 BtoB別枠 KPI コンテンツ */}
-        {kpiSegmentTab === 'btob' && (
+        {isKpiCardsOpen && kpiSegmentTab === 'btob' && (
           <div className="sos-kpi-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -2015,60 +2122,49 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           border: '1px solid #cbd5e1',
           borderLeft: `5px solid ${callFilter === 'archived' ? '#475569' : callFilter === 'won' ? '#059669' : '#1e40af'}`,
           borderRadius: '0.75rem',
-          padding: '0.75rem 1.15rem',
+          padding: '0.6rem 0.9rem',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '0.75rem',
+          gap: '0.5rem',
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
         }}>
-          <div className="sos-list-counts" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
-              📋 別枠リスト管理:
-            </span>
-            <span style={{
-              backgroundColor: '#1e40af',
-              color: '#ffffff',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              padding: '0.18rem 0.65rem',
-              borderRadius: '999px'
-            }}>
-              🏥 クリニック営業中 {clinicFilteredProjects.length}件
-            </span>
-            <span style={{
-              backgroundColor: '#059669',
-              color: '#ffffff',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              padding: '0.18rem 0.65rem',
-              borderRadius: '999px'
-            }}>
-              🎉 受注(別枠) {wonClinicProjects.length}件
-            </span>
-            <span style={{
-              backgroundColor: '#475569',
-              color: '#ffffff',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              padding: '0.18rem 0.65rem',
-              borderRadius: '999px'
-            }}>
-              🗄️ 失注(別枠) {archivedClinicProjects.length}件
-            </span>
-            <span style={{
-              backgroundColor: '#4338ca',
-              color: '#ffffff',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              padding: '0.18rem 0.65rem',
-              borderRadius: '999px'
-            }}>
-              🏢 BtoBパートナー {btobFilteredProjects.length}社
-            </span>
-            {isFiltered && (
-              <>
+          <div className="sos-list-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', fontSize: '0.76rem', width: '100%' }}>
+            {/* リスト枠切替ピル（全枠まとめ / 営業中 / 受注 / 失注 / BtoB） */}
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 800, color: '#3730a3', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示枠:</span>
+              {[
+                { id: 'split', label: '📊 全枠まとめ' },
+                { id: 'clinic_only', label: `🏥 営業中 (${clinicFilteredProjects.length})` },
+                { id: 'won_only', label: `🎉 受注 (${wonClinicProjects.length})` },
+                { id: 'archived_only', label: `🗄️ 失注 (${archivedClinicProjects.length})` },
+                { id: 'btob_only', label: `🏢 BtoB (${btobFilteredProjects.length})` }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    if (opt.id !== 'won_only' && opt.id !== 'archived_only' && (callFilter === 'won' || callFilter === 'archived')) {
+                      setCallFilter('all');
+                    }
+                    setSegmentViewMode(opt.id as SegmentViewMode);
+                  }}
+                  style={{
+                    padding: '0.18rem 0.55rem',
+                    borderRadius: '0.35rem',
+                    border: 'none',
+                    backgroundColor: segmentViewMode === opt.id ? '#4338ca' : 'transparent',
+                    color: segmentViewMode === opt.id ? '#ffffff' : '#312e81',
+                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              {isFiltered && (
                 <button
                   type="button"
                   onClick={() => {
@@ -2079,25 +2175,23 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     setSegmentViewMode('split');
                   }}
                   style={{
-                    padding: '0.22rem 0.6rem',
-                    borderRadius: '0.4rem',
+                    padding: '0.18rem 0.5rem',
+                    borderRadius: '0.35rem',
                     border: '1px solid #fca5a5',
                     backgroundColor: '#fef2f2',
                     color: '#dc2626',
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
                     cursor: 'pointer'
                   }}
                 >
-                  ✕ 全枠表示へ戻す
+                  ✕ 解除
                 </button>
-              </>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="sos-list-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.76rem' }}>
             {/* 表示スタイル切替（標準 / まとめ表示） */}
-            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#fff7ed', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #fdba74' }}>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', backgroundColor: '#fff7ed', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #fdba74' }}>
               <span style={{ fontWeight: 800, color: '#9a3412', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示:</span>
               {[
                 { id: 'compact' as const, label: '📑 まとめ表示' },
@@ -2123,48 +2217,14 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 </button>
               ))}
             </div>
-            {/* リスト枠切替ピル（全枠表示 / クリニック営業中のみ / 受注枠のみ / 失注枠のみ / BtoB枠のみ） */}
-            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 800, color: '#3730a3', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示枠:</span>
-              {[
-                { id: 'split', label: `📊 全枠を別々で表示` },
-                { id: 'clinic_only', label: `🏥 営業中のみ (${clinicFilteredProjects.length})` },
-                { id: 'won_only', label: `🎉 受注別枠 (${wonClinicProjects.length})` },
-                { id: 'archived_only', label: `🗄️ 失注別枠 (${archivedClinicProjects.length})` },
-                { id: 'btob_only', label: `🏢 BtoB別枠 (${btobFilteredProjects.length})` }
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => {
-                    if (opt.id !== 'won_only' && opt.id !== 'archived_only' && (callFilter === 'won' || callFilter === 'archived')) {
-                      setCallFilter('all');
-                    }
-                    setSegmentViewMode(opt.id as SegmentViewMode);
-                  }}
-                  style={{
-                    padding: '0.18rem 0.55rem',
-                    borderRadius: '0.35rem',
-                    border: 'none',
-                    backgroundColor: segmentViewMode === opt.id ? '#4338ca' : 'transparent',
-                    color: segmentViewMode === opt.id ? '#ffffff' : '#312e81',
-                    fontWeight: 700,
-                    fontSize: '0.72rem',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
 
             {/* クリニックポイント順並び替えピル */}
-            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #cbd5e1' }}>
-              <span style={{ fontWeight: 800, color: '#475569', padding: '0 0.25rem', fontSize: '0.73rem' }}>並び順:</span>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #cbd5e1' }}>
+              <span style={{ fontWeight: 800, color: '#475569', padding: '0 0.25rem', fontSize: '0.72rem' }}>並び順:</span>
               {[
                 { id: 'date_desc', label: '📅 反響日順' },
-                { id: 'points_desc', label: '🏆 ポイント高い順' },
-                { id: 'points_asc', label: '🌱 ポイント低い順' }
+                { id: 'points_desc', label: '🏆 ポイント順' },
+                { id: 'points_asc', label: '🌱 低い順' }
               ].map(opt => (
                 <button
                   key={opt.id}
@@ -2177,7 +2237,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     backgroundColor: sortMode === opt.id ? '#1e40af' : 'transparent',
                     color: sortMode === opt.id ? '#ffffff' : '#334155',
                     fontWeight: 700,
-                    fontSize: '0.73rem',
+                    fontSize: '0.72rem',
                     cursor: 'pointer'
                   }}
                 >
@@ -2187,8 +2247,8 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             </div>
 
             {/* 架電〜詳細 アクションバー 一括 表示/非表示 切り替えピル */}
-            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f0fdf4', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #86efac' }}>
-              <span style={{ fontWeight: 800, color: '#166534', padding: '0 0.25rem', fontSize: '0.73rem' }}>架電・詳細バー:</span>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', backgroundColor: '#f0fdf4', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #86efac' }}>
+              <span style={{ fontWeight: 800, color: '#166534', padding: '0 0.25rem', fontSize: '0.72rem' }}>架電・詳細バー:</span>
               <button
                 type="button"
                 onClick={() => handleToggleAllActionBars(true)}
@@ -2199,7 +2259,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   backgroundColor: showAllActionBars ? '#059669' : 'transparent',
                   color: showAllActionBars ? '#ffffff' : '#166534',
                   fontWeight: 800,
-                  fontSize: '0.73rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -2218,7 +2278,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   backgroundColor: !showAllActionBars ? '#0f172a' : 'transparent',
                   color: !showAllActionBars ? '#ffffff' : '#166534',
                   fontWeight: 800,
-                  fontSize: '0.73rem',
+                  fontSize: '0.72rem',
                   cursor: 'pointer',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -3057,6 +3117,48 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     >
                       詳細
                     </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        editingProject?.id === project.id ? setEditingProject(null) : openQuickEdit(project)
+                      }
+                      title="このクリニック・企業のリスト情報（名称・住所・レセコン・電話・メモ等）を訂正"
+                      style={{
+                        padding: '0.28rem 0.6rem',
+                        borderRadius: '0.42rem',
+                        border: editingProject?.id === project.id ? '2px solid #d97706' : '1px solid #fbbf24',
+                        backgroundColor: editingProject?.id === project.id ? '#fef3c7' : '#fffbeb',
+                        color: '#b45309',
+                        fontSize: '0.73rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem'
+                      }}
+                    >
+                      <Pencil size={12} /> 訂正
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFromList(project)}
+                      title="この案件をリストから削除"
+                      style={{
+                        padding: '0.28rem 0.6rem',
+                        borderRadius: '0.42rem',
+                        border: '1px solid #fca5a5',
+                        backgroundColor: '#fef2f2',
+                        color: '#dc2626',
+                        fontSize: '0.73rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.2rem'
+                      }}
+                    >
+                      <Trash2 size={12} /> 削除
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -3562,6 +3664,50 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                   <button
                     type="button"
+                    onClick={() =>
+                      editingProject?.id === project.id ? setEditingProject(null) : openQuickEdit(project)
+                    }
+                    title="このクリニック・企業のリスト情報（名称・住所・レセコン・電話・メモ等）を訂正"
+                    style={{
+                      padding: '0.38rem 0.62rem',
+                      borderRadius: '0.45rem',
+                      border: editingProject?.id === project.id ? '2px solid #d97706' : '1px solid #fbbf24',
+                      backgroundColor: editingProject?.id === project.id ? '#fef3c7' : '#fffbeb',
+                      color: '#b45309',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <Pencil size={12} /> 訂正
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteFromList(project)}
+                    title="この案件をリストから削除"
+                    style={{
+                      padding: '0.38rem 0.62rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #fca5a5',
+                      backgroundColor: '#fef2f2',
+                      color: '#dc2626',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}
+                  >
+                    <Trash2 size={12} /> 削除
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => toggleCardActionBar(project.id)}
                     title="このカードの架電・仕様・詳細ボタンバーを非表示にする"
                     style={{
@@ -3583,6 +3729,207 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   </button>
                 </div>
               </div>
+              )}
+
+              {/* インライン訂正・編集パネル */}
+              {editingProject?.id === project.id && (
+                <div style={{
+                  backgroundColor: '#fffbeb',
+                  borderTop: '2px solid #f59e0b',
+                  padding: '0.9rem 1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.7rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 900, color: '#92400e', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Pencil size={15} />
+                      <span>✏️ リスト情報の訂正・編集</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProject(null)}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #fcd34d',
+                        borderRadius: '0.35rem',
+                        padding: '0.2rem 0.5rem',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        color: '#92400e',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✕ 閉じる
+                    </button>
+                  </div>
+
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
+                    gap: '0.6rem'
+                  }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        クリニック・企業名
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.clinicName}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, clinicName: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem', fontWeight: 700 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        住所（都道府県・市区町村）
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.address}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, address: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        診療科目・区分
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.clinicType}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, clinicType: e.target.value } : null)}
+                        placeholder="例: 内科 / 歯科 / ディーラー・BtoB"
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        🖥️ レセコン
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.rececon}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, rececon: e.target.value } : null)}
+                        placeholder="例: ORCA / Medicom / PHC 等"
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        📞 電話番号
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.phone}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, phone: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        👨‍⚕️ 院長・担当者名
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.director}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, director: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        📅 反響日
+                      </label>
+                      <input
+                        type="date"
+                        value={editingProject.receivedAt}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, receivedAt: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        👤 営業担当
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.salesRep}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, salesRep: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 800, color: '#78350f', marginBottom: '0.2rem' }}>
+                        📝 メモ
+                      </label>
+                      <input
+                        type="text"
+                        value={editingProject.memo}
+                        onChange={e => setEditingProject(prev => prev ? { ...prev, memo: e.target.value } : null)}
+                        style={{ width: '100%', padding: '0.4rem 0.6rem', borderRadius: '0.4rem', border: '1px solid #fbbf24', backgroundColor: '#ffffff', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteFromList(project)}
+                      style={{
+                        padding: '0.4rem 0.8rem',
+                        borderRadius: '0.45rem',
+                        border: '1px solid #fca5a5',
+                        backgroundColor: '#fef2f2',
+                        color: '#dc2626',
+                        fontSize: '0.78rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.25rem'
+                      }}
+                    >
+                      <Trash2 size={13} /> この案件を削除
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingProject(null)}
+                        style={{
+                          padding: '0.42rem 0.9rem',
+                          borderRadius: '0.45rem',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          color: '#475569',
+                          fontSize: '0.8rem',
+                          fontWeight: 700,
+                          cursor: 'pointer'
+                        }}
+                      >
+                        キャンセル
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveQuickEdit(project)}
+                        style={{
+                          padding: '0.42rem 1.1rem',
+                          borderRadius: '0.45rem',
+                          border: 'none',
+                          backgroundColor: '#d97706',
+                          color: '#ffffff',
+                          fontSize: '0.82rem',
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 6px rgba(217, 119, 6, 0.25)'
+                        }}
+                      >
+                        💾 訂正を保存する
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {/* 全11アクション共通：実施日を選択（今日 / 明日 / +3日後 / +1週間後）インライン入力バー */}

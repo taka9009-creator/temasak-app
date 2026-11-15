@@ -1,14 +1,30 @@
 import React from 'react';
 import type { Project, NextAction } from '../types';
 import { differenceInDays, format } from 'date-fns';
+import { Pencil, Trash2 } from 'lucide-react';
+import { useProjects } from '../context/ProjectContext';
 
 interface Props {
   projects: Project[];
   actions: NextAction[];
   onProjectClick: (project: Project) => void;
+  onDeleteProject?: (project: Project) => void;
 }
 
-export default function ProjectList({ projects, actions, onProjectClick }: Props) {
+export default function ProjectList({ projects, actions, onProjectClick, onDeleteProject }: Props) {
+  const { deleteProject } = useProjects();
+
+  const handleDelete = (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    if (onDeleteProject) {
+      onDeleteProject(project);
+      return;
+    }
+    if (!window.confirm(`「${project.clinicName}」をリストから削除しますか？\n（※誤って削除した場合も、リセットボタンから初期42件に戻せます）`)) {
+      return;
+    }
+    deleteProject(project.id);
+  };
   
   const getHealthDot = (project: Project, mainAction?: NextAction) => {
     if (!mainAction) return 'dot-danger'; // 次回アクション未設定
@@ -35,6 +51,7 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
               <th>次回アクション</th>
               <th>期限</th>
               <th>最終活動</th>
+              <th style={{ textAlign: 'right' }}>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -99,12 +116,59 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
                       {diff}日前 {diff >= 7 && '(停滞注意)'}
                     </div>
                   </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onProjectClick(project);
+                        }}
+                        title="内容を訂正・編集"
+                        style={{
+                          padding: '0.3rem 0.55rem',
+                          borderRadius: '0.4rem',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          color: '#334155',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}
+                      >
+                        <Pencil size={12} /> 訂正
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDelete(e, project)}
+                        title="この案件を削除"
+                        style={{
+                          padding: '0.3rem 0.55rem',
+                          borderRadius: '0.4rem',
+                          border: '1px solid #fecaca',
+                          backgroundColor: '#fef2f2',
+                          color: '#dc2626',
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}
+                      >
+                        <Trash2 size={12} /> 削除
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
             {projects.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
                   該当する案件がありません
                 </td>
               </tr>
@@ -171,9 +235,56 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
                 )}
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                <span>担当: {project.salesRep || '未定'}</span>
-                <span>最終活動: {diff}日前</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  <span>担当: {project.salesRep || '未定'}</span>
+                  <span>最終活動: {diff}日前</span>
+                </div>
+                <div style={{ display: 'inline-flex', gap: '0.35rem', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onProjectClick(project);
+                    }}
+                    title="内容を訂正・編集"
+                    style={{
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#ffffff',
+                      color: '#334155',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <Pencil size={12} /> 訂正
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(e, project)}
+                    title="この案件を削除"
+                    style={{
+                      padding: '0.35rem 0.65rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #fecaca',
+                      backgroundColor: '#fef2f2',
+                      color: '#dc2626',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}
+                  >
+                    <Trash2 size={12} /> 削除
+                  </button>
+                </div>
               </div>
             </div>
           );
