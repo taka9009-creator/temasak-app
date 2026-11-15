@@ -1585,22 +1585,6 @@ ${(project.activities || []).map(a => {
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
                     <button
                       type="button"
-                      onClick={() => handleApplyEmlInPanel(SAMPLE_EML_3543_TEXT)}
-                      style={{
-                        padding: '0.3rem 0.65rem',
-                        borderRadius: '0.4rem',
-                        border: '1px solid #93c5fd',
-                        backgroundColor: '#ffffff',
-                        color: '#1d4ed8',
-                        fontSize: '0.74rem',
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      💡 サンプル[3543]読込
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => panelEmlInputRef.current?.click()}
                       style={{
                         padding: '0.32rem 0.75rem',

@@ -39,9 +39,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser: FirebaseUser | null) => {
       if (fbUser) {
+        const rawName = fbUser.displayName || fbUser.email?.split('@')[0] || '松浦';
+        const displayName = (rawName === 'taka9009' || rawName === '管理者') ? '松浦' : rawName;
         setUser({
           id: fbUser.uid,
-          name: fbUser.displayName || fbUser.email?.split('@')[0] || '管理者',
+          name: displayName,
           role: 'admin',
           email: fbUser.email || ''
         });

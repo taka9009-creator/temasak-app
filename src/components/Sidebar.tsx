@@ -77,8 +77,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           松
         </div>
         <div>
-          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f8fafc' }}>{user?.name || '松浦 貴文'}</div>
-          <div style={{ fontSize: '0.75rem' }}>{user?.role === 'admin' ? '北海道・東北 統括担当' : '営業担当'}</div>
+          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#f8fafc' }}>
+            {(!user?.name || user.name === 'taka9009' || user.name === '管理者' || user.name.includes('@')) ? '松浦' : user.name}
+          </div>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>北海道・東北 担当</div>
         </div>
       </div>
     </>

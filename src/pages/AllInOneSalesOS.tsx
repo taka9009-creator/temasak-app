@@ -2082,22 +2082,6 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
               <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={handleLoadSampleEmlInOS}
-                  style={{
-                    padding: '0.38rem 0.72rem',
-                    borderRadius: '0.45rem',
-                    border: '1px solid #93c5fd',
-                    backgroundColor: '#ffffff',
-                    color: '#1d4ed8',
-                    fontSize: '0.76rem',
-                    fontWeight: 700,
-                    cursor: 'pointer'
-                  }}
-                >
-                  💡 サンプル[3543]読込
-                </button>
-                <button
-                  type="button"
                   onClick={() => emlFileInputRef.current?.click()}
                   style={{
                     padding: '0.4rem 0.85rem',
@@ -2257,25 +2241,6 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             </div>
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  const sampleText = `2026-11-07 / 医療法人さくら歯科クリニック / 北海道札幌市中央区 / 松浦\n2026-11-07\tあおぞら整形外科医院\t宮城県\t仙台市青葉区\t松浦`;
-                  setPasteInputText(sampleText);
-                }}
-                style={{
-                  padding: '0.35rem 0.7rem',
-                  borderRadius: '0.45rem',
-                  border: '1px solid #6ee7b7',
-                  backgroundColor: '#ffffff',
-                  color: '#047857',
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  cursor: 'pointer'
-                }}
-              >
-                💡 サンプルを入れる
-              </button>
               <button
                 type="button"
                 onClick={async () => {

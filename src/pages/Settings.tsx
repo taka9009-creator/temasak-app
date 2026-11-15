@@ -1060,14 +1060,6 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h2>マスタデータ管理</h2>
       </div>
-      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
-        各種ドロップダウンで選択できる項目をカスタマイズします。
-      </p>
-
-      <div className="two-col-grid">
-        {renderMasterList('機器カラー', 'deviceColors')}
-        {renderMasterList('釣銭機カラー', 'changeMachineColors')}
-      </div>
 
       {/* 全端末データ統合（Firestore クラウド同期） */}
       <div className="card" style={{ marginTop: '2rem', border: '2px solid #2563eb', backgroundColor: '#eff6ff', borderRadius: '0.75rem' }}>
@@ -1172,7 +1164,7 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
       <div className="card">
         <h3 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem', marginTop: 0 }}>危険アラート設定</h3>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0' }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontWeight: 600 }}>アラート発火タイミング（設置日の〇日前）</div>
             <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>何日前から必須項目の未入力チェックを行うか設定します。</div>
@@ -1187,32 +1179,6 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
             />
             <span>日前</span>
           </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0', borderBottom: '1px solid var(--border-color)' }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>カラー未定をチェック</div>
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>本体カラーが未定の場合に警告を出します。</div>
-          </div>
-          <button
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            onClick={() => updateSettings({ dangerAlertCheckColor: !notifSettings.dangerAlertCheckColor })}
-          >
-            {notifSettings.dangerAlertCheckColor ? <ToggleRight size={32} color="var(--danger)" /> : <ToggleLeft size={32} color="var(--text-muted)" />}
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.75rem 0' }}>
-          <div>
-            <div style={{ fontWeight: 600 }}>キャッシュレス未定をチェック</div>
-            <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>キャッシュレス審査が完了していない場合に警告を出します。</div>
-          </div>
-          <button
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            onClick={() => updateSettings({ dangerAlertCheckCashless: !notifSettings.dangerAlertCheckCashless })}
-          >
-            {notifSettings.dangerAlertCheckCashless ? <ToggleRight size={32} color="var(--danger)" /> : <ToggleLeft size={32} color="var(--text-muted)" />}
-          </button>
         </div>
       </div>
     </div>

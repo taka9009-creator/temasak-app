@@ -63,7 +63,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       emailAlerts: true,
       slackIntegration: false,
       dangerAlertDaysBeforeInstall: 3,
-      dangerAlertCheckColor: true,
+      dangerAlertCheckColor: false,
       dangerAlertCheckCashless: false,
       focusMode: false
     };
@@ -78,56 +78,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         
         // 設定された日数以内で、必須項目が未定の場合
         if (diff >= 0 && diff <= (settings.dangerAlertDaysBeforeInstall || 3)) {
-          // カラー未定チェック
-          if (settings.dangerAlertCheckColor && !p.pipelineMap?.bodyColor) {
-            setNotifications(prev => {
-              const alreadyExists = prev.some(n => n.type === 'alert' && n.actionData?.projectId === p.id && n.actionData?.alertType === 'missing_color');
-              if (alreadyExists) return prev;
-              
-              const newAlert: AppNotification = {
-                id: uuidv4(),
-                title: '⚠️ 危険アラート',
-                message: `「${p.clinicName}」の設置日まであと${diff}日ですが、カラーが未定です！`,
-                type: 'alert',
-                createdAt: new Date().toISOString(),
-                isRead: false,
-                actionable: true,
-                actionData: { projectId: p.id, alertType: 'missing_color' }
-              };
-              
-              if (settings.showToasts) {
-                setToasts(t => [...t, newAlert]);
-              }
-              
-              return [newAlert, ...prev];
-            });
-          }
-
-          // キャッシュレス未定チェック
-          const hasCashless = !!(p.pipelineMap?.creditStatus || p.pipelineMap?.emoneyStatus || p.pipelineMap?.qrStatus);
-          if (settings.dangerAlertCheckCashless && !hasCashless) {
-            setNotifications(prev => {
-              const alreadyExists = prev.some(n => n.type === 'alert' && n.actionData?.projectId === p.id && n.actionData?.alertType === 'missing_cashless');
-              if (alreadyExists) return prev;
-              
-              const newAlert: AppNotification = {
-                id: uuidv4(),
-                title: '⚠️ 危険アラート',
-                message: `「${p.clinicName}」の設置日まであと${diff}日ですが、キャッシュレス審査が完了していません！`,
-                type: 'alert',
-                createdAt: new Date().toISOString(),
-                isRead: false,
-                actionable: true,
-                actionData: { projectId: p.id, alertType: 'missing_cashless' }
-              };
-              
-              if (settings.showToasts) {
-                setToasts(t => [...t, newAlert]);
-              }
-              
-              return [newAlert, ...prev];
-            });
-          }
+          // カラー未定・キャッシュレス未定チェックは設定削除に伴い廃止
         }
       }
     });

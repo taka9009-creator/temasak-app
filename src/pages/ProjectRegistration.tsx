@@ -503,23 +503,6 @@ export default function ProjectRegistration() {
           <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <button
               type="button"
-              onClick={handleLoadSampleEml}
-              style={{
-                minHeight: '38px',
-                padding: '0.4rem 0.75rem',
-                borderRadius: '0.5rem',
-                border: '1px solid #93c5fd',
-                backgroundColor: '#ffffff',
-                color: '#1d4ed8',
-                fontWeight: 700,
-                fontSize: '0.8rem',
-                cursor: 'pointer'
-              }}
-            >
-              💡 サンプルEML（[3543] あみたに動物病院）を試す
-            </button>
-            <button
-              type="button"
               onClick={() => fileInputRef.current?.click()}
               style={{
                 minHeight: '40px',
@@ -713,22 +696,6 @@ export default function ProjectRegistration() {
           <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#065f46' }}>
             📋 コピペで一瞬登録（「反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)」を貼るだけ）
           </h3>
-          <button
-            type="button"
-            onClick={() => setPasteRawText('2026-11-07 / 医療法人さくら歯科クリニック / 北海道札幌市中央区 / 松浦')}
-            style={{
-              padding: '0.3rem 0.65rem',
-              borderRadius: '0.4rem',
-              border: '1px solid #34d399',
-              backgroundColor: '#ffffff',
-              color: '#047857',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-              cursor: 'pointer'
-            }}
-          >
-            💡 サンプル貼付
-          </button>
         </div>
 
         <p style={{ margin: '0 0 0.65rem 0', fontSize: '0.8rem', color: '#047857' }}>
