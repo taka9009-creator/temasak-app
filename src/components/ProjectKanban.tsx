@@ -660,7 +660,7 @@ export default function ProjectKanban({
                         {project.clinicName}
                       </div>
 
-                      {/* エリア＆失注理由またはタスク数 */}
+                      {/* エリア＆レセコン＆タスク数 */}
                       <div style={{
                         fontSize: '0.7rem',
                         color: '#64748b',
@@ -671,6 +671,19 @@ export default function ProjectKanban({
                         gap: '0.2rem'
                       }}>
                         <span>📍 {project.address || 'エリア未設定'}</span>
+                        {(project.pipelineMap?.receiptComputer || project.reservationSystem) && (
+                          <span style={{
+                            backgroundColor: '#e0f2fe',
+                            color: '#0369a1',
+                            border: '1px solid #7dd3fc',
+                            padding: '0.06rem 0.35rem',
+                            borderRadius: '0.25rem',
+                            fontWeight: 800,
+                            fontSize: '0.64rem'
+                          }}>
+                            🖥️ {project.pipelineMap?.receiptComputer || project.reservationSystem}
+                          </span>
+                        )}
                         {pendingTasks > 0 && !isArchived && (
                           <span style={{ color: '#d97706', fontWeight: 800 }}>
                             📋 ToDo:{pendingTasks}

@@ -26,7 +26,11 @@ import {
   Trophy,
   Footprints,
   Send,
-  MessageSquare
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { useProjects } from '../context/ProjectContext';
@@ -96,6 +100,57 @@ export default function AllInOneSalesOS() {
   // ポイント履歴開閉状態
   const [isPtHistoryOpen, setIsPtHistoryOpen] = useState(false);
 
+  // クリニック別ポイント制（配点ルール＆バッジ）の表示/非表示切り替え状態
+  const [isPointRulesOpen, setIsPointRulesOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('temasak_show_point_rules');
+      if (saved !== null) return saved === 'true';
+    } catch (e) {}
+    return false;
+  });
+
+  const togglePointRulesOpen = (nextVal?: boolean) => {
+    setIsPointRulesOpen(prev => {
+      const next = nextVal !== undefined ? nextVal : !prev;
+      try {
+        localStorage.setItem('temasak_show_point_rules', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
+
+  // 各クリニックカード下段アクション＆詳細バー（架電: 会話 (+3p) 〜 詳細）の一括＆個別 表示/非表示切り替え状態
+  const [showAllActionBars, setShowAllActionBars] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('temasak_show_all_action_bars');
+      if (saved !== null) return saved === 'true';
+    } catch (e) {}
+    return false;
+  });
+  const [expandedActionCardIds, setExpandedActionCardIds] = useState<Record<string, boolean>>({});
+
+  const handleToggleAllActionBars = (showAll: boolean) => {
+    setShowAllActionBars(showAll);
+    setExpandedActionCardIds({});
+    try {
+      localStorage.setItem('temasak_show_all_action_bars', String(showAll));
+    } catch (e) {}
+  };
+
+  const isCardActionBarOpen = (projectId: string): boolean => {
+    if (expandedActionCardIds[projectId] !== undefined) {
+      return expandedActionCardIds[projectId];
+    }
+    return showAllActionBars;
+  };
+
+  const toggleCardActionBar = (projectId: string) => {
+    setExpandedActionCardIds(prev => {
+      const current = prev[projectId] !== undefined ? prev[projectId] : showAllActionBars;
+      return { ...prev, [projectId]: !current };
+    });
+  };
+
   // フィルタ＆並び替え状態
   const [callFilter, setCallFilter] = useState<CallFilter>('all');
   const [areaFilter, setAreaFilter] = useState<AreaFilter>('all');
@@ -103,6 +158,7 @@ export default function AllInOneSalesOS() {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('date_desc');
   const [segmentViewMode, setSegmentViewMode] = useState<SegmentViewMode>('split');
+  const [kpiSegmentTab, setKpiSegmentTab] = useState<'clinic' | 'btob'>('clinic');
 
   // 20pt ミッション状態 (LocalStorage永続化)
   const [pointLogs, setPointLogs] = useState<PointLog[]>(() => {
@@ -447,7 +503,8 @@ export default function AllInOneSalesOS() {
         const matchType = (p.clinicType || '').toLowerCase().includes(q);
         const matchMemo = (p.memo || '').toLowerCase().includes(q);
         const matchLost = (p.lostReason || '').toLowerCase().includes(q);
-        if (!matchName && !matchAddr && !matchType && !matchMemo && !matchLost) return false;
+        const matchRececon = (p.pipelineMap?.receiptComputer || p.reservationSystem || '').toLowerCase().includes(q);
+        if (!matchName && !matchAddr && !matchType && !matchMemo && !matchLost && !matchRececon) return false;
       }
       return true;
     });
@@ -1051,71 +1108,142 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           </div>
         </div>
 
-        {/* ポイント配点ルール一覧（日次＆クリニック別共通）バッジバー */}
+        {/* ポイント配点ルール一覧（日次＆クリニック別共通）バッジバー（表示/非表示切り替え対応） */}
         <div style={{
           display: 'flex',
-          alignItems: 'center',
-          gap: '0.4rem',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
+          gap: '0.45rem',
           paddingTop: '0.55rem',
           borderTop: '1px solid rgba(255,255,255,0.12)',
           fontSize: '0.74rem'
         }}>
-          <span style={{ color: '#fde68a', fontWeight: 800, marginRight: '0.15rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-            <Trophy size={13} color="#fbbf24" /> クリニック別ポイント制:
-          </span>
-          <span style={{
-            backgroundColor: 'rgba(59, 130, 246, 0.25)',
-            border: '1px solid rgba(147, 197, 253, 0.45)',
-            color: '#eff6ff',
-            padding: '0.16rem 0.55rem',
-            borderRadius: '999px',
-            fontWeight: 700
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
           }}>
-            📞 架電：会話 +3p / 不在 +1p / 折返待ち +1p
-          </span>
-          {[
-            '✉️ 初動メール +5p',
-            '📄 見積書送付 +5p',
-            '💻 オンラインデモ +5p',
-            '🚗 訪問デモ +5p',
-            '🏢 来社デモ +5p'
-          ].map(badge => (
-            <span
-              key={badge}
-              style={{
-                backgroundColor: 'rgba(16, 185, 129, 0.22)',
-                border: '1px solid rgba(52, 211, 153, 0.45)',
-                color: '#ecfdf5',
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <span style={{ color: '#fde68a', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                <Trophy size={13} color="#fbbf24" /> クリニック別ポイント制:
+              </span>
+              {/* 表示 / 非表示 セグメンテッド切替ボタン */}
+              <div style={{
+                display: 'inline-flex',
+                backgroundColor: 'rgba(15, 23, 42, 0.5)',
+                padding: '0.15rem',
+                borderRadius: '0.45rem',
+                border: '1px solid rgba(255,255,255,0.2)',
+                gap: '0.15rem'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => togglePointRulesOpen(true)}
+                  style={{
+                    padding: '0.16rem 0.55rem',
+                    borderRadius: '0.32rem',
+                    border: 'none',
+                    backgroundColor: isPointRulesOpen ? '#f59e0b' : 'transparent',
+                    color: isPointRulesOpen ? '#0f172a' : '#cbd5e1',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.2rem'
+                  }}
+                >
+                  <Eye size={12} /> 表示
+                </button>
+                <button
+                  type="button"
+                  onClick={() => togglePointRulesOpen(false)}
+                  style={{
+                    padding: '0.16rem 0.55rem',
+                    borderRadius: '0.32rem',
+                    border: 'none',
+                    backgroundColor: !isPointRulesOpen ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    color: !isPointRulesOpen ? '#ffffff' : '#cbd5e1',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.2rem'
+                  }}
+                >
+                  <EyeOff size={12} /> 非表示
+                </button>
+              </div>
+              {!isPointRulesOpen && (
+                <span
+                  onClick={() => togglePointRulesOpen(true)}
+                  style={{ color: '#93c5fd', fontSize: '0.71rem', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  （クリックで架電・メール・デモ・kz送客・受注の配点ルールを表示 ▼）
+                </span>
+              )}
+            </div>
+          </div>
+
+          {isPointRulesOpen && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+              <span style={{
+                backgroundColor: 'rgba(59, 130, 246, 0.25)',
+                border: '1px solid rgba(147, 197, 253, 0.45)',
+                color: '#eff6ff',
                 padding: '0.16rem 0.55rem',
                 borderRadius: '999px',
                 fontWeight: 700
-              }}
-            >
-              {badge}
-            </span>
-          ))}
-          {[
-            '🚶 訪問 +3p',
-            '📮 ポスティング +2p',
-            '📩 相談メール +3p',
-            '📨 後追いメール +2p',
-            '🎉 受注 +10p'
-          ].map(badge => (
-            <span
-              key={badge}
-              style={{
-                backgroundColor: 'rgba(245, 158, 11, 0.24)',
-                border: '1px solid rgba(252, 211, 77, 0.5)',
-                color: '#fef3c7',
-                padding: '0.16rem 0.55rem',
-                borderRadius: '999px',
-                fontWeight: 700
-              }}
-            >
-              {badge}
-            </span>
-          ))}
+              }}>
+                📞 架電：会話 +3p / 不在 +1p / 折返待ち +1p
+              </span>
+              {[
+                '✉️ 初動メール +5p',
+                '📄 見積書送付 +5p',
+                '💻 オンラインデモ +5p',
+                '🚗 訪問デモ +5p',
+                '🏢 来社デモ +5p'
+              ].map(badge => (
+                <span
+                  key={badge}
+                  style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.22)',
+                    border: '1px solid rgba(52, 211, 153, 0.45)',
+                    color: '#ecfdf5',
+                    padding: '0.16rem 0.55rem',
+                    borderRadius: '999px',
+                    fontWeight: 700
+                  }}
+                >
+                  {badge}
+                </span>
+              ))}
+              {[
+                '🚶 訪問 +3p',
+                '📮 ポスティング +2p',
+                '📩 相談メール +3p',
+                '📨 後追いメール +2p',
+                '💰 kz送客 +5p',
+                '🎉 受注 +10p'
+              ].map(badge => (
+                <span
+                  key={badge}
+                  style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.24)',
+                    border: '1px solid rgba(252, 211, 77, 0.5)',
+                    color: '#fef3c7',
+                    padding: '0.16rem 0.55rem',
+                    borderRadius: '999px',
+                    fontWeight: 700
+                  }}
+                >
+                  {badge}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* 獲得ポイント履歴ドロワー */}
@@ -1178,53 +1306,144 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         )}
       </div>
 
-      {/* 2. KPI リアルタイム集計バー（クリニック直販KPI ＆ BtoBディーラー別枠KPI の2枠分離） */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-        {/* 2-A. 🏥 クリニック直販 KPI枠 */}
+      {/* 2. KPI リアルタイム集計バー（直販枠 KPI ⇔ BtoB別枠 KPI セグメンテッドコントロール切替） */}
+      <div style={{
+        backgroundColor: kpiSegmentTab === 'clinic' ? '#f8fafc' : '#f5f3ff',
+        border: kpiSegmentTab === 'clinic' ? '1px solid #cbd5e1' : '1px solid #a5b4fc',
+        borderLeft: kpiSegmentTab === 'clinic' ? '5px solid #2563eb' : '5px solid #4338ca',
+        borderRadius: '0.9rem',
+        padding: '0.8rem 1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.7rem',
+        boxShadow: '0 2px 8px rgba(15, 23, 42, 0.04)'
+      }}>
+        {/* セグメンテッドコントロール（直販枠 KPI ⇔ BtoB別枠 KPI） */}
         <div style={{
-          backgroundColor: '#f8fafc',
-          border: '1px solid #cbd5e1',
-          borderLeft: '5px solid #2563eb',
-          borderRadius: '0.9rem',
-          padding: '0.75rem 0.95rem',
           display: 'flex',
-          flexDirection: 'column',
-          gap: '0.6rem'
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.65rem'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{
+            display: 'inline-flex',
+            backgroundColor: '#e2e8f0',
+            padding: '0.25rem',
+            borderRadius: '0.65rem',
+            border: '1px solid #cbd5e1',
+            gap: '0.25rem',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              type="button"
+              onClick={() => {
+                setKpiSegmentTab('clinic');
+                if (segmentViewMode === 'btob_only') setSegmentViewMode('split');
+              }}
+              style={{
+                padding: '0.42rem 1.05rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: kpiSegmentTab === 'clinic' ? '#ffffff' : 'transparent',
+                color: kpiSegmentTab === 'clinic' ? '#1d4ed8' : '#475569',
+                fontWeight: 900,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                boxShadow: kpiSegmentTab === 'clinic' ? '0 2px 6px rgba(15, 23, 42, 0.12)' : 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
               <span style={{
-                backgroundColor: '#1d4ed8',
+                backgroundColor: kpiSegmentTab === 'clinic' ? '#1d4ed8' : '#94a3b8',
                 color: '#ffffff',
-                fontSize: '0.72rem',
+                fontSize: '0.68rem',
                 fontWeight: 800,
-                padding: '0.15rem 0.55rem',
+                padding: '0.1rem 0.45rem',
                 borderRadius: '999px'
               }}>
                 直販枠 KPI
               </span>
-              <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#0f172a' }}>
-                🏥 クリニック営業 KPI（医療機関・直販のみ集計 / BtoB除外）
+              <span>🏥 クリニック営業 KPI（{kpiStats.total}件 / 受注{kpiStats.wonCount}件）</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setKpiSegmentTab('btob');
+              }}
+              style={{
+                padding: '0.42rem 1.05rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: kpiSegmentTab === 'btob' ? '#ffffff' : 'transparent',
+                color: kpiSegmentTab === 'btob' ? '#4338ca' : '#475569',
+                fontWeight: 900,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                boxShadow: kpiSegmentTab === 'btob' ? '0 2px 6px rgba(15, 23, 42, 0.12)' : 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{
+                backgroundColor: kpiSegmentTab === 'btob' ? '#4338ca' : '#94a3b8',
+                color: '#ffffff',
+                fontSize: '0.68rem',
+                fontWeight: 800,
+                padding: '0.1rem 0.45rem',
+                borderRadius: '999px'
+              }}>
+                BtoB別枠 KPI
               </span>
-            </div>
+              <span>🏢 ディーラー・パートナー企業 KPI（{kpiStats.btob.total}社 / 累計{kpiStats.btob.totalPts}p）</span>
+            </button>
+          </div>
+
+          {kpiSegmentTab === 'clinic' ? (
             <button
               type="button"
               onClick={() => setSegmentViewMode(segmentViewMode === 'clinic_only' ? 'split' : 'clinic_only')}
               style={{
-                padding: '0.2rem 0.65rem',
+                padding: '0.28rem 0.75rem',
                 borderRadius: '999px',
                 border: segmentViewMode === 'clinic_only' ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
                 backgroundColor: segmentViewMode === 'clinic_only' ? '#1d4ed8' : '#ffffff',
                 color: segmentViewMode === 'clinic_only' ? '#ffffff' : '#334155',
-                fontSize: '0.73rem',
-                fontWeight: 700,
+                fontSize: '0.74rem',
+                fontWeight: 800,
                 cursor: 'pointer'
               }}
             >
-              {segmentViewMode === 'clinic_only' ? '✓ クリニックのみ表示中（2枠表示へ戻す）' : '🏥 クリニック枠のみ表示'}
+              {segmentViewMode === 'clinic_only' ? '✓ クリニックのみ表示中（全枠表示へ戻す）' : '🏥 クリニック枠のみ表示'}
             </button>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setSegmentViewMode(segmentViewMode === 'btob_only' ? 'split' : 'btob_only')}
+              style={{
+                padding: '0.28rem 0.75rem',
+                borderRadius: '999px',
+                border: segmentViewMode === 'btob_only' ? '1px solid #4338ca' : '1px solid #a5b4fc',
+                backgroundColor: segmentViewMode === 'btob_only' ? '#4338ca' : '#ffffff',
+                color: segmentViewMode === 'btob_only' ? '#ffffff' : '#3730a3',
+                fontSize: '0.74rem',
+                fontWeight: 800,
+                cursor: 'pointer'
+              }}
+            >
+              {segmentViewMode === 'btob_only' ? '✓ BtoBリストのみ表示中（全枠表示へ戻す）' : '🏢 BtoB企業リストのみ表示'}
+            </button>
+          )}
+        </div>
 
+        {/* 2-A. 🏥 直販枠 KPI コンテンツ */}
+        {kpiSegmentTab === 'clinic' && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -1349,53 +1568,10 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* 2-B. 🏢 ディーラー・パートナー企業（BtoB別枠）KPI枠 */}
-        <div style={{
-          background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)',
-          border: '1px solid #a5b4fc',
-          borderLeft: '5px solid #4338ca',
-          borderRadius: '0.9rem',
-          padding: '0.75rem 0.95rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.6rem'
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <span style={{
-                backgroundColor: '#4338ca',
-                color: '#ffffff',
-                fontSize: '0.72rem',
-                fontWeight: 800,
-                padding: '0.15rem 0.55rem',
-                borderRadius: '999px'
-              }}>
-                BtoB別枠 KPI
-              </span>
-              <span style={{ fontSize: '0.86rem', fontWeight: 800, color: '#1e1b4b' }}>
-                🏢 ディーラー・パートナー企業 KPI（BtoBアライアンス・卸・紹介パートナー別枠集計）
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setSegmentViewMode(segmentViewMode === 'btob_only' ? 'split' : 'btob_only')}
-              style={{
-                padding: '0.2rem 0.65rem',
-                borderRadius: '999px',
-                border: segmentViewMode === 'btob_only' ? '1px solid #4338ca' : '1px solid #a5b4fc',
-                backgroundColor: segmentViewMode === 'btob_only' ? '#4338ca' : '#ffffff',
-                color: segmentViewMode === 'btob_only' ? '#ffffff' : '#3730a3',
-                fontSize: '0.73rem',
-                fontWeight: 700,
-                cursor: 'pointer'
-              }}
-            >
-              {segmentViewMode === 'btob_only' ? '✓ BtoBリストのみ表示中（2枠表示へ戻す）' : '🏢 BtoB企業リストのみ表示'}
-            </button>
-          </div>
-
+        {/* 2-B. 🏢 BtoB別枠 KPI コンテンツ */}
+        {kpiSegmentTab === 'btob' && (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
@@ -1501,7 +1677,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* 3. かんたん検索・エリア＆月フィルタバー（コンパクト1行表示） */}
@@ -1577,7 +1753,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="名称・市区町村・科目"
+              placeholder="名称・市区町村・科目・レセコン"
               style={{
                 width: '100%',
                 padding: '0.25rem 0.5rem 0.25rem 1.6rem',
@@ -1950,6 +2126,49 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 </button>
               ))}
             </div>
+
+            {/* 架電〜詳細 アクションバー 一括 表示/非表示 切り替えピル */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f0fdf4', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #86efac' }}>
+              <span style={{ fontWeight: 800, color: '#166534', padding: '0 0.25rem', fontSize: '0.73rem' }}>架電・詳細バー:</span>
+              <button
+                type="button"
+                onClick={() => handleToggleAllActionBars(true)}
+                style={{
+                  padding: '0.18rem 0.55rem',
+                  borderRadius: '0.35rem',
+                  border: 'none',
+                  backgroundColor: showAllActionBars ? '#059669' : 'transparent',
+                  color: showAllActionBars ? '#ffffff' : '#166534',
+                  fontWeight: 800,
+                  fontSize: '0.73rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.2rem'
+                }}
+              >
+                <Eye size={12} /> 全件表示
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleAllActionBars(false)}
+                style={{
+                  padding: '0.18rem 0.55rem',
+                  borderRadius: '0.35rem',
+                  border: 'none',
+                  backgroundColor: !showAllActionBars ? '#0f172a' : 'transparent',
+                  color: !showAllActionBars ? '#ffffff' : '#166534',
+                  fontWeight: 800,
+                  fontSize: '0.73rem',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.2rem'
+                }}
+              >
+                <EyeOff size={12} /> 全件非表示
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2254,6 +2473,30 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       borderRadius: '0.35rem'
                     }}>
                       {project.clinicType}
+                    </span>
+
+                    {/* レセコン表示バッジ（クリックで基本情報のレセコン欄を直接開く） */}
+                    <span
+                      onClick={() => {
+                        setDetailInitialTab('basicInfo');
+                        setDetailProjectId(project.id);
+                      }}
+                      title="クリックしてレセコン情報を入力・編集"
+                      style={{
+                        backgroundColor: (project.pipelineMap?.receiptComputer || project.reservationSystem) ? '#e0f2fe' : '#f8fafc',
+                        color: (project.pipelineMap?.receiptComputer || project.reservationSystem) ? '#0369a1' : '#64748b',
+                        border: (project.pipelineMap?.receiptComputer || project.reservationSystem) ? '1px solid #7dd3fc' : '1px dashed #cbd5e1',
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        padding: '0.15rem 0.58rem',
+                        borderRadius: '0.35rem',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.22rem'
+                      }}
+                    >
+                      🖥️ レセコン: {project.pipelineMap?.receiptComputer || project.reservationSystem || '未設定'}
                     </span>
 
                     <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
@@ -2671,7 +2914,90 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 </div>
               </div>
 
-              {/* 下段：ワンクリック記録アクションバー */}
+              {/* 下段：ワンクリック記録アクションバー（架電: 会話 (+3p) 〜 詳細 の表示/非表示切り替え対応） */}
+              {!isCardActionBarOpen(project.id) ? (
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  borderTop: '1px solid #e2e8f0',
+                  padding: '0.4rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem'
+                }}>
+                  <div
+                    onClick={() => toggleCardActionBar(project.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.75rem',
+                      color: '#475569',
+                      fontWeight: 700,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span style={{
+                      backgroundColor: '#e2e8f0',
+                      color: '#334155',
+                      fontSize: '0.7rem',
+                      fontWeight: 800,
+                      padding: '0.12rem 0.5rem',
+                      borderRadius: '999px'
+                    }}>
+                      🕒 活動履歴 ({(project.activities || []).length})
+                    </span>
+                    <span>
+                      {isArchived
+                        ? `🗄️ 失注理由: ${project.lostReason || 'その他'}（クリックで復活ボタン等を表示）`
+                        : '⚡ 架電・メール・デモ・kz送客・7STEP仕様・現調・詳細メニュー（非表示中）'}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => toggleCardActionBar(project.id)}
+                      style={{
+                        padding: '0.28rem 0.7rem',
+                        borderRadius: '0.42rem',
+                        border: '1px solid #93c5fd',
+                        backgroundColor: '#eff6ff',
+                        color: '#1d4ed8',
+                        fontSize: '0.73rem',
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.22rem'
+                      }}
+                    >
+                      <ChevronDown size={13} />
+                      <span>架電・仕様・詳細ボタンを表示</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDetailInitialTab('basicInfo');
+                        setDetailProjectId(project.id);
+                      }}
+                      style={{
+                        padding: '0.28rem 0.6rem',
+                        borderRadius: '0.42rem',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: '#ffffff',
+                        color: '#334155',
+                        fontSize: '0.73rem',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      詳細
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div style={{
                 backgroundColor: '#f8fafc',
                 borderTop: '1px solid #e2e8f0',
@@ -3004,8 +3330,8 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   </div>
                 )}
 
-                {/* 右グループ：AIナレッジ文面作成 ＆ アーカイブ（失注）移動 ＆ 詳細 */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                {/* 右グループ：AIナレッジ文面作成 ＆ アーカイブ（失注）移動 ＆ 詳細 ＆ 非表示ボタン */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                   <button
                     onClick={() => openAiAssistant(project, 'auto')}
                     style={{
@@ -3171,8 +3497,31 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   >
                     詳細
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => toggleCardActionBar(project.id)}
+                    title="このカードの架電・仕様・詳細ボタンバーを非表示にする"
+                    style={{
+                      padding: '0.38rem 0.6rem',
+                      borderRadius: '0.45rem',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f1f5f9',
+                      color: '#475569',
+                      fontSize: '0.73rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.18rem'
+                    }}
+                  >
+                    <ChevronUp size={13} />
+                    <span>非表示</span>
+                  </button>
                 </div>
               </div>
+              )}
 
               {/* 全11アクション共通：実施日を選択（今日 / 明日 / +3日後 / +1週間後）インライン入力バー */}
               {isDemoPickerOpenForThis && activeDemoPicker && (

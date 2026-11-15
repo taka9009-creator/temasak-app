@@ -50,6 +50,7 @@ export default function Reports() {
   const [drillStage, setDrillStage] = useState<StageDrillFilter>('all');
   const [detailProjectId, setDetailProjectId] = useState<string | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [kpiSegmentTab, setKpiSegmentTab] = useState<'clinic' | 'btob'>('clinic');
 
   // 都道府県抽出ヘルパー
   const extractPref = (addr?: string): string => {
@@ -653,7 +654,83 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* 3. メインKPI：「問い合わせ → デモ → 受注」ゴールデンファネル ＆ 7段階進捗フロー分析 */}
+      {/* 2.8 直販枠 KPI ⇔ BtoB別枠 KPI セグメンテッドコントロール */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{
+          display: 'inline-flex',
+          backgroundColor: '#e2e8f0',
+          padding: '0.28rem',
+          borderRadius: '0.7rem',
+          border: '1px solid #cbd5e1',
+          gap: '0.3rem',
+          flexWrap: 'wrap'
+        }}>
+          <button
+            type="button"
+            onClick={() => setKpiSegmentTab('clinic')}
+            style={{
+              padding: '0.48rem 1.15rem',
+              borderRadius: '0.55rem',
+              border: 'none',
+              backgroundColor: kpiSegmentTab === 'clinic' ? '#ffffff' : 'transparent',
+              color: kpiSegmentTab === 'clinic' ? '#1d4ed8' : '#475569',
+              fontWeight: 900,
+              fontSize: '0.86rem',
+              cursor: 'pointer',
+              boxShadow: kpiSegmentTab === 'clinic' ? '0 2px 6px rgba(15, 23, 42, 0.12)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem'
+            }}
+          >
+            <span style={{
+              backgroundColor: kpiSegmentTab === 'clinic' ? '#1d4ed8' : '#94a3b8',
+              color: '#ffffff',
+              fontSize: '0.7rem',
+              fontWeight: 800,
+              padding: '0.12rem 0.5rem',
+              borderRadius: '999px'
+            }}>
+              直販枠 KPI
+            </span>
+            <span>🏥 クリニック直販 KPI・ファネル（{analytics.inquiryCount}件）</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setKpiSegmentTab('btob')}
+            style={{
+              padding: '0.48rem 1.15rem',
+              borderRadius: '0.55rem',
+              border: 'none',
+              backgroundColor: kpiSegmentTab === 'btob' ? '#ffffff' : 'transparent',
+              color: kpiSegmentTab === 'btob' ? '#4338ca' : '#475569',
+              fontWeight: 900,
+              fontSize: '0.86rem',
+              cursor: 'pointer',
+              boxShadow: kpiSegmentTab === 'btob' ? '0 2px 6px rgba(15, 23, 42, 0.12)' : 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem'
+            }}
+          >
+            <span style={{
+              backgroundColor: kpiSegmentTab === 'btob' ? '#4338ca' : '#94a3b8',
+              color: '#ffffff',
+              fontSize: '0.7rem',
+              fontWeight: 800,
+              padding: '0.12rem 0.5rem',
+              borderRadius: '999px'
+            }}>
+              BtoB別枠 KPI
+            </span>
+            <span>🏢 ディーラー・パートナー企業 KPI（{analytics.btob.total}社）</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3. メインKPI：「問い合わせ → デモ → 受注」ゴールデンファネル ＆ 8段階進捗フロー分析（直販枠 KPI選択時） */}
+      {kpiSegmentTab === 'clinic' && (
       <div style={{
         background: 'linear-gradient(135deg, #ffffff 0%, #f0f9ff 100%)',
         border: '2px solid #93c5fd',
@@ -888,8 +965,10 @@ export default function Reports() {
           </div>
         </div>
       </div>
+      )}
 
-      {/* 3.5 BtoB別枠：「ディーラー・パートナー企業」KPI・ファネル ＆ パートナー企業営業中リスト */}
+      {/* 3.5 BtoB別枠：「ディーラー・パートナー企業」KPI・ファネル ＆ パートナー企業営業中リスト（BtoB別枠 KPI選択時） */}
+      {kpiSegmentTab === 'btob' && (
       <div style={{
         background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)',
         border: '2px solid #a5b4fc',
@@ -1044,6 +1123,7 @@ export default function Reports() {
           </div>
         </div>
       </div>
+      )}
 
       {/* 4. 地域別（北海道・東北5道県）× 月別コホートの2カラム詳細分析 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr', gap: '1.25rem' }}>

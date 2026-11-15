@@ -67,7 +67,8 @@ export default function ProjectManagement() {
     const matchRep = p.salesRep?.toLowerCase().includes(normalizedQuery);
     const matchAddress = p.address?.toLowerCase().includes(normalizedQuery);
     const matchLost = p.lostReason?.toLowerCase().includes(normalizedQuery);
-    return matchClinic || matchContact || matchRep || matchAddress || matchLost;
+    const matchRececon = (p.pipelineMap?.receiptComputer || p.reservationSystem || '').toLowerCase().includes(normalizedQuery);
+    return matchClinic || matchContact || matchRep || matchAddress || matchLost || matchRececon;
   });
 
   const archivedProjects = filteredProjects.filter(p => p.status === '失注');
@@ -236,6 +237,17 @@ export default function ProjectManagement() {
                         </span>
                         <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
                           📍 {p.address}（{p.clinicType}）
+                        </span>
+                        <span style={{
+                          backgroundColor: '#e0f2fe',
+                          color: '#0369a1',
+                          border: '1px solid #7dd3fc',
+                          fontSize: '0.73rem',
+                          fontWeight: 800,
+                          padding: '0.12rem 0.5rem',
+                          borderRadius: '0.35rem'
+                        }}>
+                          🖥️ レセコン: {p.pipelineMap?.receiptComputer || p.reservationSystem || '未設定'}
                         </span>
                         {p.lostReason && (
                           <span style={{

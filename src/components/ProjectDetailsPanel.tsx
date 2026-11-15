@@ -208,7 +208,7 @@ export default function ProjectDetailsPanel({
     setAmHours(parsedSched.amHours);
     setPmHours(parsedSched.pmHours);
     setWeeklyMatrix(parsedSched.matrix);
-    setReservationSystem(project.reservationSystem || '');
+    setReservationSystem(project.pipelineMap?.receiptComputer || project.reservationSystem || '');
     setProbability(project.probability || '未設定');
     setDirector(project.pipelineMap?.director || '');
     setDepartment(project.pipelineMap?.department || project.clinicType || '');
@@ -254,8 +254,11 @@ export default function ProjectDetailsPanel({
     setJcbCreditStatus(pm.jcbCreditStatus || '');
     setEmoneyStatus(pm.emoneyStatus || '');
     setQrStatus(pm.qrStatus || '');
+    setReservationSystem(pm.receiptComputer || project.reservationSystem || '');
   }, [
     project?.probability,
+    project?.reservationSystem,
+    project?.pipelineMap?.receiptComputer,
     project?.pipelineMap?.creditStatus,
     project?.pipelineMap?.jcbCreditStatus,
     project?.pipelineMap?.emoneyStatus,
@@ -345,7 +348,8 @@ export default function ProjectDetailsPanel({
       pipelineMap: {
         ...project.pipelineMap,
         director: nextDirector,
-        department: nextDept
+        department: nextDept,
+        receiptComputer: nextReservation
       }
     });
 
@@ -440,9 +444,8 @@ export default function ProjectDetailsPanel({
 ・確度: ${project.probability || '未設定'}
 ・累計獲得ポイント: ${totalPts}p
 ・営業担当: ${project.salesRep}
-・現在のボール: ${project.ballHolder || project.salesRep}
 ・休診日: ${closedDays || project.closedDays || '未設定'}
-・予約システム: ${reservationSystem || project.reservationSystem || '未設定'}
+・レセコン: ${reservationSystem || project.pipelineMap?.receiptComputer || project.reservationSystem || '未設定'}
 ・次回予定タスク: ${mainAction ? `${mainAction.title}（期限: ${mainAction.deadline}）` : '未設定'}
 
 【活動履歴】
@@ -548,22 +551,6 @@ ${(project.activities || []).map(a => {
             </h2>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#fef3c7', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', border: '1px solid #fde68a', marginRight: '0.5rem' }}>
-              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#b45309', marginRight: '0.25rem' }}>🏀 ボール:</span>
-              <select 
-                className="input-field" 
-                style={{ padding: '0', fontSize: '0.75rem', border: 'none', backgroundColor: 'transparent', color: '#b45309', fontWeight: 600, outline: 'none', cursor: 'pointer', width: 'auto' }}
-                value={project.ballHolder || ''}
-                onChange={e => onUpdateProject?.(project.id, { ballHolder: e.target.value })}
-              >
-                <option value="">(未設定)</option>
-                <option value={project.salesRep}>{project.salesRep} (営業)</option>
-                <option value="クリニック">クリニック（確認待ち）</option>
-                <option value="サポート窓口">サポート窓口</option>
-                <option value="パートナー業者">パートナー業者</option>
-                <option value="経理">経理</option>
-              </select>
-            </div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', marginLeft: '0.5rem' }}><X size={24} color="var(--text-muted)"/></button>
           </div>
         </div>
@@ -794,7 +781,10 @@ ${(project.activities || []).map(a => {
             <div><strong>最終活動：</strong> {project.lastActivityAt}</div>
             <div><strong>経過：</strong> {differenceInDays(new Date(), new Date(project.lastActivityAt))}日</div>
             <div style={{ gridColumn: 'span 2' }}>
-              <strong>ボール：</strong> <span className="badge neutral">{project.ballHolder}</span>
+              <strong>🖥️ レセコン：</strong>{' '}
+              <span className="badge info" style={{ fontWeight: 800 }}>
+                {project.pipelineMap?.receiptComputer || project.reservationSystem || '未設定'}
+              </span>
             </div>
           </div>
 
@@ -1456,14 +1446,14 @@ ${(project.activities || []).map(a => {
                     />
                   </div>
                   <div>
-                    <strong>📅 予約システム:</strong>
+                    <strong>🖥️ レセコン:</strong>
                     <input
                       type="text"
                       className="mock-input"
                       value={reservationSystem}
                       onChange={e => setReservationSystem(e.target.value)}
                       onBlur={e => saveBasicInfoToProject({ reservationSystem: e.target.value })}
-                      placeholder="例: デジスマ / Web予約あり"
+                      placeholder="例: ORCA / Medicom / PHC / 富士通 / 島津 等"
                     />
                   </div>
                 </div>
@@ -1594,7 +1584,7 @@ ${(project.activities || []).map(a => {
                           </span>
                         </div>
                         <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
-                          <div>・レセコン: <strong>{pm.receiptComputer || '未入力'}</strong></div>
+                          <div>・レセコン: <strong>{pm.receiptComputer || project.reservationSystem || '未入力'}</strong></div>
                           <div>・現調日: <strong>{project.surveyDate || '未定'}</strong></div>
                           <div>・設置予定日: <strong>{project.installationDate || '未定'}</strong></div>
                         </div>
@@ -3501,8 +3491,23 @@ ${(project.activities || []).map(a => {
                       </div>
                     )}
 
-                    {/* 現地調査日・設置工事日・電源LAN増設工事 */}
-                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.75rem' }}>
+                    {/* レセコン・現地調査日・設置工事日・電源LAN増設工事 */}
+                    <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>🖥️ レセコン（メーカー・機種名）:</label>
+                        <input
+                          type="text"
+                          className="mock-input"
+                          value={reservationSystem}
+                          placeholder="例: ORCA / Medicom / PHC"
+                          onChange={e => setReservationSystem(e.target.value)}
+                          onBlur={e => {
+                            saveBasicInfoToProject({ reservationSystem: e.target.value });
+                            setCashlessSaveMsg('✅ レセコン情報を保存しました（基本情報・クリニックリストと同期済）');
+                            setTimeout(() => setCashlessSaveMsg(null), 2500);
+                          }}
+                        />
+                      </div>
                       <div>
                         <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155' }}>📅 ④ 現地調査 訪問日:</label>
                         <input

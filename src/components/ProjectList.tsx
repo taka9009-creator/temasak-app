@@ -30,6 +30,7 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
           <thead>
             <tr>
               <th>クリニック・案件名</th>
+              <th>レセコン</th>
               <th>ステータス</th>
               <th>次回アクション</th>
               <th>期限</th>
@@ -43,6 +44,7 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
               const healthDot = getHealthDot(project, mainAction);
               const lastAct = project.lastActivityAt || project.createdAt || new Date().toISOString();
               const diff = differenceInDays(new Date(), new Date(lastAct));
+              const receconVal = project.pipelineMap?.receiptComputer || project.reservationSystem;
 
               return (
                 <tr key={project.id} onClick={() => onProjectClick(project)} style={{ cursor: 'pointer' }}>
@@ -56,6 +58,22 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
                         {project.contactPerson || project.pipelineMap?.director}
                       </div>
                     )}
+                  </td>
+                  <td>
+                    <span
+                      style={{
+                        backgroundColor: receconVal ? '#e0f2fe' : '#f1f5f9',
+                        color: receconVal ? '#0369a1' : '#64748b',
+                        border: receconVal ? '1px solid #7dd3fc' : '1px dashed #cbd5e1',
+                        fontSize: '0.75rem',
+                        fontWeight: 700,
+                        padding: '0.18rem 0.55rem',
+                        borderRadius: '0.35rem',
+                        display: 'inline-block'
+                      }}
+                    >
+                      🖥️ {receconVal || '未設定'}
+                    </span>
                   </td>
                   <td>
                     <span className="badge neutral" style={{ fontWeight: 600 }}>{project.status}</span>
@@ -124,6 +142,9 @@ export default function ProjectList({ projects, actions, onProjectClick }: Props
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
                     {project.clinicName}
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#0369a1', fontWeight: 700, marginTop: '0.2rem' }}>
+                    🖥️ レセコン: {project.pipelineMap?.receiptComputer || project.reservationSystem || '未設定'}
                   </div>
                   {(project.contactPerson || project.pipelineMap?.director) && (
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
