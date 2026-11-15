@@ -58,16 +58,20 @@ export type SalesProgressStage = typeof SALES_PROGRESS_FLOW[number];
  * 案件が「ディーラー・パートナー企業（BtoB）」かどうかを判定するヘルパー
  */
 export function isBtoBDealerProject(project: Project): boolean {
+  const nameStr = project.clinicName || '';
+  // 「いまいメディカルサポート株式会社」はクリニック・調剤薬局の直販枠
+  if (nameStr.includes('いまいメディカルサポート')) {
+    return false;
+  }
+
   const typeStr = project.clinicType || '';
   const srcStr = project.source || '';
-  const nameStr = project.clinicName || '';
   if (typeStr.includes('ディーラー') || typeStr.includes('パートナー')) return true;
   if (srcStr.includes('BtoB') || srcStr.includes('ディーラー')) return true;
   if (
     nameStr.includes('コセキ') ||
     nameStr.includes('スズケン') ||
     nameStr.includes('歯科器材') ||
-    nameStr.includes('メディカルサポート') ||
     nameStr.includes('株式会社三城') ||
     nameStr.includes('株式会社三櫻') ||
     nameStr.includes('株式会社フォールド')

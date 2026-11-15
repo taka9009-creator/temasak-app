@@ -65,6 +65,25 @@ function isValidProductionProjectId(id: string | undefined): boolean {
   return id.startsWith('roster-') || id.startsWith('paste-proj-') || id.startsWith('prod-');
 }
 
+// 既存データ（ローカル・クラウド）をクリニック枠・最新区分に正規化するヘルパー
+function normalizeLoadedProject(p: Project): Project {
+  if (!p) return p;
+  if (p.id === 'roster-4990' || p.clinicName?.includes('いまいメディカルサポート')) {
+    return {
+      ...p,
+      clinicType: '調剤薬局',
+      source: '直販（調剤薬局）',
+      memo: (p.memo || '').replace(/BtoB・ディーラー/g, '調剤薬局'),
+      pipelineMap: {
+        ...(p.pipelineMap || {}),
+        department: '調剤薬局',
+        inquiryType: '直販（調剤薬局）'
+      }
+    };
+  }
+  return p;
+}
+
 interface ProjectContextType {
   projects: Project[];
   actions: NextAction[];
@@ -104,16 +123,18 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const validOnly = parsed.filter(
-            (p: Project) => isValidProductionProjectId(p?.id) && !deletedIds.has(p.id)
-          );
+          const validOnly = parsed
+            .filter((p: Project) => isValidProductionProjectId(p?.id) && !deletedIds.has(p.id))
+            .map(normalizeLoadedProject);
           if (validOnly.length > 0) return validOnly;
         }
       }
     } catch (e) {
       console.error('Failed to load local projects:', e);
     }
-    return buildRoster42Dataset().projects.filter(p => !deletedIds.has(p.id));
+    return buildRoster42Dataset()
+      .projects.filter(p => !deletedIds.has(p.id))
+      .map(normalizeLoadedProject);
   });
 
   const [actions, setActions] = useState<NextAction[]>(() => {
@@ -355,9 +376,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(CLOUD_RECOVERED_FLAG, 'done');
       }
 
-      const mergedList = Array.from(loadedMap.values()).sort((a, b) =>
-        (b.receivedAt || '').localeCompare(a.receivedAt || '')
-      );
+      const mergedList = Array.from(loadedMap.values())
+        .map(normalizeLoadedProject)
+        .sort((a, b) =>
+          (b.receivedAt || '').localeCompare(a.receivedAt || '')
+        );
       setProjects(mergedList);
     }, (error) => {
       console.error('Firestore projects error:', error);

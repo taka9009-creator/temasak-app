@@ -979,14 +979,14 @@
     {
       "id": "roster-4990",
       "clinicName": "いまいメディカルサポート株式会社",
-      "clinicType": "調剤薬局　",
+      "clinicType": "調剤薬局",
       "address": "宮城県仙台市太白区大野田4-20-14",
       "phone": "022-797-5776",
       "email": "",
       "contactPerson": "ご担当者様",
       "contactTitle": "担当者",
-      "memo": "【名簿No.4990 / 反響#3476】BtoB・ディーラー | ●資料送付済 / メール未 | 架電状況: 不在",
-      "source": "BtoB・ディーラー",
+      "memo": "【名簿No.4990 / 反響#3476】調剤薬局 | ●資料送付済 / メール未 | 架電状況: 不在",
+      "source": "直販（調剤薬局）",
       "sourceDetail": "反響番号: 3476 (木曜反響)",
       "receivedAt": "2026-07-30",
       "salesRep": "松浦 貴文",
@@ -998,15 +998,15 @@
       "ballHolder": "松浦 貴文",
       "isImplementationProject": false,
       "probability": "C",
-      "aiSummary": "【宮城県仙台市太白区 / ディーラー・パートナー企業】反響日:2026-07-30 (BtoB・ディーラー)。●資料送付済。現在ステータス: 架電「不在」。",
-      "aiRecommendation": "院長先生・事務長様が不在でした。休診時間前に再コールするか、30秒で読める「資料到着確認＋導入事例メール」をAI起案して送りましょう。",
+      "aiSummary": "【宮城県仙台市太白区 / 調剤薬局】反響日:2026-07-30 (調剤薬局)。●資料送付済。現在ステータス: 架電「不在」。",
+      "aiRecommendation": "院長先生・薬局長様が不在でした。休診時間前に再コールするか、30秒で読める「資料到着確認＋導入事例メール」をAI起案して送りましょう。",
       "activities": [
         {
           "id": "act-rec-4990",
           "projectId": "roster-4990",
           "date": "2026-07-30",
           "type": "反響受付",
-          "content": "名簿No.4990（反響番号:3476 / 木曜）として受付。区分: BtoB・ディーラー"
+          "content": "名簿No.4990（反響番号:3476 / 木曜）として受付。区分: 調剤薬局"
         },
         {
           "id": "act-doc-4990",
@@ -1024,8 +1024,8 @@
         }
       ],
       "pipelineMap": {
-        "department": "調剤薬局　",
-        "inquiryType": "BtoB・ディーラー",
+        "department": "調剤薬局",
+        "inquiryType": "直販（調剤薬局）",
         "deviceType": "テマサック (標準モデル)",
         "purpose": "受付会計の待ち時間短縮・締め作業効率化",
         "director": ""

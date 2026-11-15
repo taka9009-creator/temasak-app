@@ -87,7 +87,15 @@ export function inferDepartment(name: string): string {
 
 export function inferLeadTag(rawName: string): { cleanName: string; tag: string; isNewOpening: boolean; isDealer: boolean } {
   const isNewOpening = rawName.includes('新規開業');
-  const isDealer = rawName.includes('コセキ') || rawName.includes('スズケン') || rawName.includes('歯科器材') || rawName.includes('メディカルサポート') || rawName.includes('三城') || rawName.includes('三櫻') || rawName.includes('フォールド');
+  // いまいメディカルサポートはクリニック枠（調剤薬局直販）
+  const isDealer = !rawName.includes('いまいメディカルサポート') && (
+    rawName.includes('コセキ') ||
+    rawName.includes('スズケン') ||
+    rawName.includes('歯科器材') ||
+    rawName.includes('三城') ||
+    rawName.includes('三櫻') ||
+    rawName.includes('フォールド')
+  );
   
   let tag = '新規反響';
   if (isNewOpening) tag = '新規開業';
