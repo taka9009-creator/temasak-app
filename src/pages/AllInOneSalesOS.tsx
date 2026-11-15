@@ -32,13 +32,26 @@ import {
   Eye,
   EyeOff,
   Pencil,
-  Trash2
+  Trash2,
+  Upload,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { addDays, format } from 'date-fns';
 import { useProjects } from '../context/ProjectContext';
 import ProjectDetailsPanel from '../components/ProjectDetailsPanel';
 import seedData from '../utils/sales_os_seed.json';
 import { parsePastedRosterText, convertParsedLeadsToProjects } from '../utils/roster42Data';
+import {
+  readInquiryEmlFiles,
+  parseInquiryEml,
+  isInquiryEmailText,
+  findMatchingProjectsForEml,
+  createProjectAndActionFromEml,
+  buildProjectUpdatesFromEml,
+  SAMPLE_EML_3543_TEXT
+} from '../utils/emlParser';
+import type { ParsedInquiryEml } from '../utils/emlParser';
 import {
   ACTION_POINT_RULES,
   SALES_PROGRESS_FLOW,
@@ -83,9 +96,13 @@ export default function AllInOneSalesOS() {
     resetToRoster42
   } = useProjects();
 
-  // コピペ新規追加ドロワー/モーダル状態
+  // コピペ・EML新規追加ドロワー/モーダル状態
   const [isPasteBoxOpen, setIsPasteBoxOpen] = useState(false);
   const [pasteInputText, setPasteInputText] = useState('');
+  const [emlPreviewItems, setEmlPreviewItems] = useState<ParsedInquiryEml[]>([]);
+  const [isEmlDragOver, setIsEmlDragOver] = useState(false);
+  const [emlParseErr, setEmlParseErr] = useState('');
+  const emlFileInputRef = React.useRef<HTMLInputElement>(null);
 
   // 全アクション共通：実施日選択ピッカー状態
   const [activeDemoPicker, setActiveDemoPicker] = useState<{
@@ -1056,11 +1073,76 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
   const detailProject = projects.find(p => p.id === detailProjectId) || null;
 
-  // コピペテキストのリアルタイム解析プレビュー
+  // コピペテキストからEML/問い合わせフォーム文面の自動検知
+  const pastedEmlItem = useMemo(() => {
+    if (!pasteInputText.trim() || !isInquiryEmailText(pasteInputText)) return null;
+    const parsed = parseInquiryEml(pasteInputText);
+    return parsed.clinicName || parsed.phone || parsed.email ? parsed : null;
+  }, [pasteInputText]);
+
+  const activeEmlItems = useMemo(
+    () => (emlPreviewItems.length > 0 ? emlPreviewItems : pastedEmlItem ? [pastedEmlItem] : []),
+    [emlPreviewItems, pastedEmlItem]
+  );
+
+  // コピペテキストのリアルタイム解析プレビュー（EML形式でない場合のみ名簿行パース）
   const parsedPreviewLeads = useMemo(() => {
-    if (!pasteInputText.trim()) return [];
+    if (!pasteInputText.trim() || isInquiryEmailText(pasteInputText)) return [];
     return parsePastedRosterText(pasteInputText);
   }, [pasteInputText]);
+
+  const handleEmlFilesSelected = async (files: FileList | File[] | undefined | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const results = await readInquiryEmlFiles(files);
+      const valid = results.filter(r => r.clinicName || r.phone || r.email);
+      if (valid.length === 0) {
+        setEmlParseErr('お問い合わせ項目（【貴院名】【電話番号】など）が見つかりませんでした。');
+        return;
+      }
+      setEmlParseErr('');
+      setEmlPreviewItems(valid);
+    } catch (e) {
+      console.error('EML read error:', e);
+      setEmlParseErr('EMLファイルの読み込みに失敗しました。');
+    }
+  };
+
+  const handleLoadSampleEmlInOS = () => {
+    const parsed = parseInquiryEml(SAMPLE_EML_3543_TEXT);
+    setEmlParseErr('');
+    setEmlPreviewItems([parsed]);
+  };
+
+  const handleRegisterEmlItems = () => {
+    if (activeEmlItems.length === 0) return;
+    const created = activeEmlItems.map(item =>
+      createProjectAndActionFromEml(item, {
+        salesRep: '松浦 貴文',
+        initialStatus: SALES_PROGRESS_FLOW[0]
+      })
+    );
+    const newProjs = created.map(c => c.project);
+    const newActs = created.map(c => c.action);
+    addProjectsBulk(newProjs, newActs);
+    addPoint(
+      newProjs[0].clinicName + (newProjs.length > 1 ? ` 他${newProjs.length - 1}件` : ''),
+      `EML新規反響登録 (${newProjs.length}件) (+${newProjs.length}p)`,
+      newProjs.length
+    );
+    setEmlPreviewItems([]);
+    setEmlParseErr('');
+    if (pastedEmlItem) setPasteInputText('');
+    setIsPasteBoxOpen(false);
+    triggerToast(`📧 EMLから ${newProjs.length} 件の新規案件を名簿に追加しました！（+${newProjs.length}p）`);
+  };
+
+  const handleUpdateExistingFromEmlInOS = (target: Project, item: ParsedInquiryEml) => {
+    updateProject(target.id, buildProjectUpdatesFromEml(target, item));
+    setEmlPreviewItems(prev => prev.filter(x => x !== item));
+    if (pastedEmlItem === item) setPasteInputText('');
+    triggerToast(`🔄 既存案件「${target.clinicName}」の基本情報をEML内容で更新しました！`);
+  };
 
   const handleRegisterPastedLeads = () => {
     if (parsedPreviewLeads.length === 0) {
@@ -1951,7 +2033,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         </div>
       </div>
 
-      {/* 3.5 コピペ新規追加パネル */}
+      {/* 3.5 EML読み込み ＆ コピペ新規追加パネル */}
       {isPasteBoxOpen && (
         <div style={{
           backgroundColor: '#f0fdf4',
@@ -1960,16 +2042,217 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           padding: '1.15rem 1.35rem',
           display: 'flex',
           flexDirection: 'column',
-          gap: '0.85rem',
+          gap: '1rem',
           boxShadow: '0 8px 20px rgba(16, 185, 129, 0.12)'
         }}>
+          {/* 📧 EMLファイル読み込み（ドラッグ＆ドロップ / ファイル選択 / サンプル） */}
+          <div
+            onDragOver={e => {
+              e.preventDefault();
+              setIsEmlDragOver(true);
+            }}
+            onDragLeave={() => setIsEmlDragOver(false)}
+            onDrop={e => {
+              e.preventDefault();
+              setIsEmlDragOver(false);
+              handleEmlFilesSelected(e.dataTransfer.files);
+            }}
+            style={{
+              backgroundColor: isEmlDragOver ? '#dbeafe' : '#eff6ff',
+              border: `2px ${isEmlDragOver ? 'solid' : 'dashed'} #3b82f6`,
+              borderRadius: '0.75rem',
+              padding: '0.9rem 1.1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.65rem',
+              transition: 'background-color 0.15s ease'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div>
+                <div style={{ fontSize: '0.98rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Mail size={17} />
+                  <span>📧 お問い合わせメール（.eml）読み込み（ドラッグ＆ドロップ対応）</span>
+                </div>
+                <div style={{ fontSize: '0.78rem', color: '#1d4ed8', marginTop: '0.15rem' }}>
+                  「資料請求・お問い合わせフォーム」の .eml ファイルをドロップ（複数可）すると基本情報などを自動抽出します（下のボックスへメール本文を貼り付けてもOK）
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  onClick={handleLoadSampleEmlInOS}
+                  style={{
+                    padding: '0.38rem 0.72rem',
+                    borderRadius: '0.45rem',
+                    border: '1px solid #93c5fd',
+                    backgroundColor: '#ffffff',
+                    color: '#1d4ed8',
+                    fontSize: '0.76rem',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  💡 サンプル[3543]読込
+                </button>
+                <button
+                  type="button"
+                  onClick={() => emlFileInputRef.current?.click()}
+                  style={{
+                    padding: '0.4rem 0.85rem',
+                    borderRadius: '0.45rem',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.3rem'
+                  }}
+                >
+                  <Upload size={14} /> EMLファイルを選択（複数可）
+                </button>
+                <input
+                  ref={emlFileInputRef}
+                  type="file"
+                  multiple
+                  accept=".eml,.txt,message/rfc822,text/plain"
+                  style={{ display: 'none' }}
+                  onChange={e => {
+                    handleEmlFilesSelected(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
+
+            {emlParseErr && (
+              <div style={{ padding: '0.45rem 0.75rem', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '0.4rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <AlertTriangle size={14} /> {emlParseErr}
+              </div>
+            )}
+
+            {activeEmlItems.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                {activeEmlItems.map((item, idx) => {
+                  const matchedList = findMatchingProjectsForEml(projects, item);
+                  const matched = matchedList[0];
+                  return (
+                    <div
+                      key={`${item.inquiryNo}-${idx}`}
+                      style={{
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '0.55rem',
+                        padding: '0.7rem 0.85rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.45rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>
+                          🏥 {item.clinicName || '(貴院名なし)'} {item.inquiryNo ? `【受付番号 #${item.inquiryNo} / ${item.receivedAt}】` : `【${item.receivedAt}】`}
+                        </strong>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (emlPreviewItems.length > 0) {
+                              setEmlPreviewItems(prev => prev.filter(x => x !== item));
+                            } else {
+                              setPasteInputText('');
+                            }
+                          }}
+                          title="この候補を外す"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex' }}
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.25rem 0.8rem', fontSize: '0.78rem', color: '#334155' }}>
+                        <div>👤 役職・担当者: <strong>{item.contactTitle || '-'} {item.contactPerson || '-'}</strong></div>
+                        <div>📞 電話: <strong>{item.phone || '-'}</strong></div>
+                        <div>✉️ メール: <strong>{item.email || '-'}</strong></div>
+                        <div>🧾 レセコン: <strong>{item.rececon || '-'}</strong></div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          📍 住所: {item.postalCode && `〒${item.postalCode} `}{item.address || '-'}
+                        </div>
+                        <div style={{ gridColumn: '1 / -1' }}>🖥️ 商材: {item.products || '-'}</div>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          📝 種別: {item.inquiryTypes || '-'} / 理由: {item.reason || '-'}
+                          {item.content && ` / 内容: ${item.content}`}
+                        </div>
+                      </div>
+
+                      {matched && (
+                        <div style={{ paddingTop: '0.35rem', borderTop: '1px dashed #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.76rem', color: '#b45309', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <AlertTriangle size={13} /> 既存案件「{matched.clinicName}」と一致しました
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateExistingFromEmlInOS(matched, item)}
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '0.45rem',
+                              border: 'none',
+                              backgroundColor: '#d97706',
+                              color: '#ffffff',
+                              fontWeight: 800,
+                              fontSize: '0.76rem',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.3rem'
+                            }}
+                          >
+                            <RefreshCw size={13} /> 既存「{matched.clinicName}」の基本情報をこのEMLで更新する
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={handleRegisterEmlItems}
+                  style={{
+                    width: '100%',
+                    padding: '0.62rem 1rem',
+                    borderRadius: '0.5rem',
+                    border: 'none',
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.88rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <CheckCircle2 size={16} />
+                  <span>
+                    ✅ 新規案件として名簿に追加する{activeEmlItems.length > 1 ? `（${activeEmlItems.length}件）` : ''} (+{activeEmlItems.length}p)
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <div style={{ fontSize: '1rem', fontWeight: 800, color: '#065f46', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>📋 コピペで超かんたん新規追加（1行〜複数行まとめてOK）</span>
+                <span>📋 コピペで超かんたん新規追加（1行〜複数行まとめてOK / メール本文ペーストも可）</span>
               </div>
               <div style={{ fontSize: '0.8rem', color: '#047857', marginTop: '0.15rem' }}>
-                Excelやスプレッドシート、チャットから <strong>「反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)」</strong> をそのまま貼り付けてください
+                Excelやスプレッドシート、チャットから <strong>「反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)」</strong> またはお問い合わせメール本文を貼り付けてください
               </div>
             </div>
 
@@ -2998,41 +3281,87 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   )}
                 </div>
 
-                {/* 右カラム：次にやること（次アクション）＆ AIアドバイス */}
-                <div className="sos-card-next" style={{
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '0.65rem',
-                  padding: '0.7rem 0.95rem',
-                  border: '1px solid #e2e8f0'
-                }}>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
-                    <span>🎯 次にやること</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {nextAct?.deadline && (
-                        <span style={{ color: '#0f766e', fontWeight: 800 }}>
-                          📅 {nextAct.deadline}
+                {/* 右カラム：右上の住所表示 ＆ 次にやること（次アクション） ＆ AIアドバイス */}
+                <div className="sos-card-right" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', minWidth: 0 }}>
+                  {/* 右上の住所表示（クリックでGoogleマップ検索） */}
+                  {project.address && (
+                    <div
+                      className="sos-card-address"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: '0.25rem'
+                      }}
+                    >
+                      <a
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(project.address)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Googleマップで住所を確認"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.25rem',
+                          backgroundColor: '#f1f5f9',
+                          border: '1px solid #cbd5e1',
+                          padding: '0.15rem 0.55rem',
+                          borderRadius: '0.35rem',
+                          color: '#1e293b',
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                          cursor: 'pointer',
+                          maxWidth: '100%',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        <MapPin size={12} color="#2563eb" style={{ flexShrink: 0 }} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {project.address}
                         </span>
-                      )}
-                      <span style={{
-                        backgroundColor: isArchived ? '#e2e8f0' : currentProgressStage === '受注' ? '#d1fae5' : '#dbeafe',
-                        color: isArchived ? '#475569' : currentProgressStage === '受注' ? '#065f46' : '#1e40af',
-                        padding: '0.08rem 0.45rem',
-                        borderRadius: '0.25rem',
-                        fontWeight: 800
-                      }}>
-                        {isArchived ? '失注' : currentProgressStage}
-                      </span>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.35 }}>
-                    {nextAct ? nextAct.title : 'フォローアップ完了'}
-                  </div>
-                  {project.aiRecommendation && (
-                    <div className="sos-card-ai" style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.25rem' }}>
-                      <Sparkles size={13} color="#7c3aed" style={{ flexShrink: 0, marginTop: '2px' }} />
-                      <span>{project.aiRecommendation}</span>
+                      </a>
                     </div>
                   )}
+
+                  <div className="sos-card-next" style={{
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '0.65rem',
+                    padding: '0.7rem 0.95rem',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
+                      <span>🎯 次にやること</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {nextAct?.deadline && (
+                          <span style={{ color: '#0f766e', fontWeight: 800 }}>
+                            📅 {nextAct.deadline}
+                          </span>
+                        )}
+                        <span style={{
+                          backgroundColor: isArchived ? '#e2e8f0' : currentProgressStage === '受注' ? '#d1fae5' : '#dbeafe',
+                          color: isArchived ? '#475569' : currentProgressStage === '受注' ? '#065f46' : '#1e40af',
+                          padding: '0.08rem 0.45rem',
+                          borderRadius: '0.25rem',
+                          fontWeight: 800
+                        }}>
+                          {isArchived ? '失注' : currentProgressStage}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.35 }}>
+                      {nextAct ? nextAct.title : 'フォローアップ完了'}
+                    </div>
+                    {project.aiRecommendation && (
+                      <div className="sos-card-ai" style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.25rem' }}>
+                        <Sparkles size={13} color="#7c3aed" style={{ flexShrink: 0, marginTop: '2px' }} />
+                        <span>{project.aiRecommendation}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

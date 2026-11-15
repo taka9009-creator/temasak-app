@@ -641,8 +641,8 @@
       "clinicType": "動物病院",
       "address": "札幌市中央区宮の森4条5丁目3－25",
       "phone": "011-215-7881",
-      "email": "",
-      "contactPerson": "院長先生 / 事務長様",
+      "email": "amitani-ah@wf6.so-net.ne.jp",
+      "contactPerson": "網谷誠",
       "contactTitle": "院長",
       "memo": "【名簿No.5057 / 反響#3543】新規反響 | ●資料送付済 / 〇メール済 | 架電状況: 会話 | 面談日: 2026-09-04(訪問デモ) | 初動メール済(2026-08-30) | 後追いメール済(2026-11-16)",
       "source": "新規反響",
@@ -708,10 +708,11 @@
       ],
       "pipelineMap": {
         "department": "動物病院",
-        "inquiryType": "新規反響",
-        "deviceType": "テマサック (標準モデル)",
-        "purpose": "受付会計の待ち時間短縮・締め作業効率化",
-        "director": "網谷誠"
+        "inquiryType": "資料請求,その他ご相談/質問",
+        "deviceType": "テマサックPro スタンドタイプ / テマサックPro カウンタータイプ",
+        "purpose": "業務の効率化（人員不足の為セミセルフレジを検討・実際の使用感を知りたい）",
+        "director": "網谷誠",
+        "receiptComputer": "アニコムレセプター"
       },
       "createdAt": "2026-08-30",
       "updatedAt": "2026-11-07T13:18:37.506Z",
@@ -722,7 +723,7 @@
       "websiteUrl": "https://www.amitani-ah.com/",
       "clinicHours": "午前 09:30-12:00 / 午後 14:00〜18:00",
       "closedDays": "日曜午後・水曜・祝日",
-      "reservationSystem": "",
+      "reservationSystem": "アニコムレセプター",
       "followupEmailDate": "2026-11-16"
     },
     {

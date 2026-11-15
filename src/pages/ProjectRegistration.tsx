@@ -4,14 +4,39 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkflow } from '../context/WorkflowContext';
 import type { Project, NextAction, ActionPriority } from '../types';
-import { CheckCircle2, AlertTriangle, UserPlus, Calendar, CheckSquare, Sparkles, ArrowRight, Mic } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, UserPlus, CheckSquare, ArrowRight, Mic, Mail, Upload, X, RefreshCw } from 'lucide-react';
 import VoiceActionModal from '../components/VoiceActionModal';
-import { parsePastedRosterText, convertParsedLeadsToProjects } from '../utils/roster42Data';
+import { parsePastedRosterText, convertParsedLeadsToProjects, inferDepartment } from '../utils/roster42Data';
+import {
+  readInquiryEmlFiles,
+  parseInquiryEml,
+  inferDeviceTypeFromProducts,
+  findMatchingProjectsForEml,
+  formatEmlMemo,
+  buildProjectUpdatesFromEml,
+  createProjectAndActionFromEml,
+  SAMPLE_EML_3543_TEXT
+} from '../utils/emlParser';
+import type { ParsedInquiryEml } from '../utils/emlParser';
 import { format } from 'date-fns';
 import { v4 as uuidv4 } from 'uuid';
 
+const EMPTY_EXTRA = {
+  email: '',
+  address: '',
+  postalCode: '',
+  contactTitle: '',
+  rececon: '',
+  inquiryNo: '',
+  receivedAt: '',
+  products: '',
+  inquiryTypes: '',
+  reason: '',
+  content: ''
+};
+
 export default function ProjectRegistration() {
-  const { addProject, addProjectsBulk, projects } = useProjects();
+  const { addProject, addProjectsBulk, updateProject, projects } = useProjects();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { kanbanColumns } = useWorkflow();
@@ -46,8 +71,102 @@ export default function ProjectRegistration() {
     todoTitle: '初回電話ヒアリング',
     todoDeadline: todayStr,
     todoPriority: '高' as ActionPriority,
-    todoMemo: ''
+    todoMemo: '',
+    ...EMPTY_EXTRA
   });
+
+  // 📧 EML読み込み状態
+  const [emlInfo, setEmlInfo] = useState<ParsedInquiryEml | null>(null);
+  const [emlQueue, setEmlQueue] = useState<ParsedInquiryEml[]>([]);
+  const [emlError, setEmlError] = useState('');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [emlPasteText, setEmlPasteText] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const applyParsedEml = (parsed: ParsedInquiryEml) => {
+    if (!parsed.clinicName && !parsed.phone && !parsed.email) {
+      setEmlError('お問い合わせ項目（【貴院名】【電話番号】など）が見つかりませんでした。フォームからのお問い合わせメールか確認してください。');
+      setEmlInfo(null);
+      return false;
+    }
+    setEmlError('');
+    setEmlInfo(parsed);
+    setFormData(prev => ({
+      ...prev,
+      clinicName: parsed.clinicName || prev.clinicName,
+      contactPerson: parsed.contactPerson || prev.contactPerson,
+      contactTitle: parsed.contactTitle || prev.contactTitle,
+      phone: parsed.phone || prev.phone,
+      email: parsed.email || prev.email,
+      address: parsed.address || prev.address,
+      postalCode: parsed.postalCode || prev.postalCode,
+      rececon: parsed.rececon || prev.rececon,
+      inquiryNo: parsed.inquiryNo || prev.inquiryNo,
+      receivedAt: parsed.receivedAt || prev.receivedAt,
+      products: parsed.products || prev.products,
+      inquiryTypes: parsed.inquiryTypes || prev.inquiryTypes,
+      reason: parsed.reason || prev.reason,
+      content: parsed.content || prev.content,
+      memo: formatEmlMemo(parsed),
+      todoTitle: parsed.inquiryTypes.includes('資料請求') ? '資料到着確認の初回架電（ファーストコール）' : '初回電話ヒアリング',
+      todoPriority: '高',
+      todoMemo: parsed.content ? `ご要望: ${parsed.content.slice(0, 80)}` : prev.todoMemo
+    }));
+    return true;
+  };
+
+  const handleEmlFiles = async (files: FileList | File[] | undefined | null) => {
+    if (!files || files.length === 0) return;
+    try {
+      const results = await readInquiryEmlFiles(files);
+      const valid = results.filter(r => r.clinicName || r.phone || r.email);
+      if (valid.length === 0) {
+        setEmlQueue([]);
+        setEmlError('お問い合わせ項目（【貴院名】【電話番号】など）が見つかりませんでした。フォームからのお問い合わせメールか確認してください。');
+        setEmlInfo(null);
+        return;
+      }
+      setEmlQueue(valid);
+      applyParsedEml(valid[0]);
+    } catch (e) {
+      console.error('EML parse error:', e);
+      setEmlError('EMLファイルの読み込みに失敗しました。');
+    }
+  };
+
+  const handleEmlPasteApply = () => {
+    if (!emlPasteText.trim()) return;
+    const parsed = parseInquiryEml(emlPasteText);
+    if (applyParsedEml(parsed)) setEmlQueue([parsed]);
+  };
+
+  const handleLoadSampleEml = () => {
+    const parsed = parseInquiryEml(SAMPLE_EML_3543_TEXT);
+    if (applyParsedEml(parsed)) setEmlQueue([parsed]);
+  };
+
+  const handleApplyEmlToExisting = (target: Project, parsed?: ParsedInquiryEml | null) => {
+    const source = parsed || emlInfo;
+    if (!source) return;
+    updateProject(target.id, buildProjectUpdatesFromEml(target, source));
+    localStorage.removeItem('project_draft_v2');
+    alert(`既存案件「${target.clinicName}」の基本情報（メール・レセコン・担当者・希望商材など）にEMLの内容を反映しました！`);
+    navigate('/');
+  };
+
+  const handleBulkEmlRegister = () => {
+    if (emlQueue.length === 0) return;
+    const initialStatus = kanbanColumns.length > 0 ? kanbanColumns[0].id : '新規';
+    const salesRep = formData.salesRep || defaultRep;
+    const created = emlQueue.map(item => createProjectAndActionFromEml(item, { salesRep, initialStatus }));
+    addProjectsBulk(
+      created.map(c => c.project),
+      created.map(c => c.action)
+    );
+    localStorage.removeItem('project_draft_v2');
+    alert(`${created.length} 件のEMLを新規案件として一括登録しました！`);
+    navigate('/');
+  };
 
   const [isRegistered, setIsRegistered] = useState(false);
   const [registeredSummary, setRegisteredSummary] = useState<{
@@ -85,8 +204,17 @@ export default function ProjectRegistration() {
     '訪問デモ・現調'
   ];
 
-  // 重複チェック
-  const existingCount = projects.filter(p => p.clinicName && p.clinicName === formData.clinicName.trim()).length;
+  // 重複チェック（名称の部分一致・電話番号・反響番号）
+  const duplicateProjects = React.useMemo(
+    () =>
+      findMatchingProjectsForEml(projects, {
+        clinicName: formData.clinicName,
+        phone: formData.phone,
+        inquiryNo: formData.inquiryNo
+      }),
+    [projects, formData.clinicName, formData.phone, formData.inquiryNo]
+  );
+  const existingCount = duplicateProjects.length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,32 +226,76 @@ export default function ProjectRegistration() {
       alert('最初のアクション（ToDo）を入力してください。');
       return;
     }
+    if (
+      existingCount > 0 &&
+      !window.confirm(`同じクリニック・電話番号・反響番号の案件が既に ${existingCount} 件登録されています。\n（${duplicateProjects.map(p => p.clinicName).join(' / ')}）\n\nそれでも新規登録しますか？`)
+    ) {
+      return;
+    }
 
     const projectId = `prod-${uuidv4()}`;
     const today = new Date();
+    const todayYmd = format(today, 'yyyy-MM-dd');
+    const receivedAt = formData.receivedAt || todayYmd;
     const initialStatus = kanbanColumns.length > 0 ? kanbanColumns[0].id : '新規';
+    const clinicName = formData.clinicName.trim();
+    const department = inferDepartment(clinicName);
+    const isFromEml = !!emlInfo;
+    const contactTitle = formData.contactTitle.trim();
+    const contactPerson = formData.contactPerson.trim();
+    const isDirector = contactTitle.includes('院長') || contactTitle.includes('理事長');
+
+    const activities = [
+      {
+        id: `act-rec-${projectId}`,
+        projectId,
+        date: receivedAt,
+        type: '反響受付',
+        content: isFromEml
+          ? `資料請求・お問い合わせフォーム（受付番号: ${formData.inquiryNo || '-'}）をEMLから取込。種別: ${formData.inquiryTypes || '-'} / 商材: ${formData.products || '-'}`
+          : '新規案件として登録'
+      }
+    ];
 
     // 1. プロジェクト作成
     const newProject: Project = {
       id: projectId,
-      clinicName: formData.clinicName.trim(),
-      clinicType: 'クリニック',
-      address: '',
+      clinicName,
+      clinicType: department === '医療機関' ? 'クリニック' : department,
+      address: formData.address.trim(),
       phone: formData.phone.trim(),
-      email: '',
-      contactPerson: formData.contactPerson.trim(),
-      contactTitle: '担当者',
+      email: formData.email.trim(),
+      contactPerson,
+      contactTitle: contactTitle || '担当者',
       memo: formData.memo.trim(),
-      source: '直接受付',
-      receivedAt: format(today, 'yyyy-MM-dd'),
+      source: isFromEml ? 'HP資料請求・お問い合わせフォーム' : '直接受付',
+      sourceDetail: formData.inquiryNo ? `反響番号: ${formData.inquiryNo}` : undefined,
+      receivedAt,
       salesRep: formData.salesRep || defaultRep,
-      product: 'テマサック自動精算機',
+      product: formData.products ? `テマサック（${formData.products}）` : 'テマサック自動精算機',
       quantity: 1,
       status: initialStatus,
       priority: formData.todoPriority,
-      lastActivityAt: format(today, 'yyyy-MM-dd'),
+      lastActivityAt: todayYmd,
       ballHolder: formData.salesRep || defaultRep,
       isImplementationProject: false,
+      reservationSystem: formData.rececon.trim() || undefined,
+      activities,
+      pipelineMap: {
+        department: department === '医療機関' ? undefined : department,
+        receiptComputer: formData.rececon.trim() || undefined,
+        director: isDirector ? contactPerson : undefined,
+        deviceType: inferDeviceTypeFromProducts(formData.products) || undefined,
+        inquiryType: formData.inquiryTypes || undefined,
+        purpose: formData.content
+          ? formData.reason
+            ? `${formData.reason}（${formData.content}）`
+            : formData.content
+          : formData.reason || undefined
+      },
+      aiSummary: isFromEml
+        ? `【${formData.address || '住所未設定'}】反響日:${receivedAt}（HPフォーム #${formData.inquiryNo || '-'}）。理由: ${formData.reason || '-'}。${formData.content ? `要望: ${formData.content}` : ''}`
+        : undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -167,8 +339,13 @@ export default function ProjectRegistration() {
       todoTitle: '初回電話ヒアリング',
       todoDeadline: todayStr,
       todoPriority: '高',
-      todoMemo: ''
+      todoMemo: '',
+      ...EMPTY_EXTRA
     });
+    setEmlInfo(null);
+    setEmlQueue([]);
+    setEmlError('');
+    setEmlPasteText('');
   };
 
   // 登録完了ビュー
@@ -287,6 +464,233 @@ export default function ProjectRegistration() {
         }}
       />
 
+      {/* 📧 EML読み込みで自動入力（資料請求・お問い合わせフォームのメール） */}
+      <section
+        className="card"
+        onDragOver={e => {
+          e.preventDefault();
+          setIsDragOver(true);
+        }}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={e => {
+          e.preventDefault();
+          setIsDragOver(false);
+          handleEmlFiles(e.dataTransfer.files);
+        }}
+        style={{
+          padding: '1.25rem 1.5rem',
+          borderRadius: '0.85rem',
+          marginBottom: '1.5rem',
+          backgroundColor: isDragOver ? '#dbeafe' : '#eff6ff',
+          border: `2px ${isDragOver ? 'solid' : 'dashed'} #3b82f6`,
+          transition: 'background-color 0.15s ease'
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#1e3a8a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <Mail size={18} /> 📧 お問い合わせメール（EML）から自動入力
+          </h3>
+          <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={handleLoadSampleEml}
+              style={{
+                minHeight: '38px',
+                padding: '0.4rem 0.75rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #93c5fd',
+                backgroundColor: '#ffffff',
+                color: '#1d4ed8',
+                fontWeight: 700,
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+            >
+              💡 サンプルEML（[3543] あみたに動物病院）を試す
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                minHeight: '40px',
+                padding: '0.45rem 0.95rem',
+                borderRadius: '0.5rem',
+                border: 'none',
+                backgroundColor: '#2563eb',
+                color: '#ffffff',
+                fontWeight: 800,
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem'
+              }}
+            >
+              <Upload size={16} /> EMLファイルを選択（複数可）
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".eml,.txt,message/rfc822,text/plain"
+            style={{ display: 'none' }}
+            onChange={e => {
+              handleEmlFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        <p style={{ margin: '0 0 0.6rem 0', fontSize: '0.8rem', color: '#1d4ed8' }}>
+          「資料請求・お問い合わせフォームよりお問い合わせがありました」のメール（.eml）をここへドラッグ＆ドロップ（複数まとめてもOK）。
+          貴院名・担当者・役職・電話・メール・住所・レセコン・商材・お問い合わせ内容を自動で入力します（ファイルは端末内だけで処理）。
+        </p>
+
+        <details style={{ fontSize: '0.8rem', color: '#1e40af' }}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>📋 メール本文をコピペして読み込む（スマホ向け）</summary>
+          <textarea
+            rows={4}
+            value={emlPasteText}
+            onChange={e => setEmlPasteText(e.target.value)}
+            placeholder={'【貴院名】\n　〇〇クリニック\n【電話番号】\n　011-xxx-xxxx ...'}
+            style={{ width: '100%', marginTop: '0.5rem', padding: '0.6rem', borderRadius: '0.5rem', border: '1px solid #93c5fd', fontSize: '0.85rem', fontFamily: 'monospace' }}
+          />
+          <button
+            type="button"
+            onClick={handleEmlPasteApply}
+            disabled={!emlPasteText.trim()}
+            style={{
+              marginTop: '0.4rem',
+              padding: '0.45rem 0.9rem',
+              borderRadius: '0.45rem',
+              border: '1px solid #2563eb',
+              backgroundColor: emlPasteText.trim() ? '#ffffff' : '#f1f5f9',
+              color: '#1d4ed8',
+              fontWeight: 700,
+              cursor: emlPasteText.trim() ? 'pointer' : 'not-allowed'
+            }}
+          >
+            本文から自動入力
+          </button>
+        </details>
+
+        {emlError && (
+          <div style={{ marginTop: '0.6rem', padding: '0.55rem 0.8rem', backgroundColor: '#fef2f2', color: '#b91c1c', borderRadius: '0.45rem', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <AlertTriangle size={15} /> {emlError}
+          </div>
+        )}
+
+        {emlInfo && (
+          <div style={{ marginTop: '0.75rem', backgroundColor: '#ffffff', border: '1px solid #bfdbfe', borderRadius: '0.6rem', padding: '0.75rem 0.9rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+              <strong style={{ color: '#065f46', fontSize: '0.88rem' }}>
+                ✅ 読み込み完了{emlInfo.inquiryNo ? `（受付番号 ${emlInfo.inquiryNo}）` : ''} — 下のフォームに反映しました
+              </strong>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmlInfo(null);
+                  setEmlQueue([]);
+                }}
+                title="プレビューを閉じる"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.3rem 0.9rem', fontSize: '0.8rem', color: '#334155' }}>
+              <div>🏥 {emlInfo.clinicName || '-'}</div>
+              <div>👤 {emlInfo.contactTitle} {emlInfo.contactPerson}</div>
+              <div>📞 {emlInfo.phone || '-'}</div>
+              <div>✉️ {emlInfo.email || '-'}</div>
+              <div style={{ gridColumn: '1 / -1' }}>📍 {emlInfo.postalCode && `〒${emlInfo.postalCode} `}{emlInfo.address || '-'}</div>
+              <div>🧾 レセコン: {emlInfo.rececon || '-'}</div>
+              <div>📅 反響日: {emlInfo.receivedAt}</div>
+              <div style={{ gridColumn: '1 / -1' }}>🖥️ 商材: {emlInfo.products || '-'}</div>
+              <div style={{ gridColumn: '1 / -1' }}>📝 種別: {emlInfo.inquiryTypes || '-'} / 理由: {emlInfo.reason || '-'}</div>
+            </div>
+
+            {duplicateProjects.length > 0 && (
+              <div style={{ marginTop: '0.65rem', padding: '0.6rem 0.75rem', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.8rem', color: '#92400e', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <AlertTriangle size={15} /> すでに「{duplicateProjects[0].clinicName}」が登録されています（新規ではなく既存案件への反映も可能です）
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleApplyEmlToExisting(duplicateProjects[0], emlInfo)}
+                  style={{
+                    padding: '0.45rem 0.85rem',
+                    borderRadius: '0.45rem',
+                    border: 'none',
+                    backgroundColor: '#d97706',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.35rem'
+                  }}
+                >
+                  <RefreshCw size={14} /> 既存案件「{duplicateProjects[0].clinicName}」の基本情報にこのEML内容を反映する
+                </button>
+              </div>
+            )}
+
+            {emlQueue.length > 1 && (
+              <div style={{ marginTop: '0.65rem', paddingTop: '0.6rem', borderTop: '1px dashed #cbd5e1', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#1e3a8a' }}>
+                  📦 複数EML読み込み済み（{emlQueue.length}件）— クリックで個別プレビュー切替
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', maxHeight: '110px', overflowY: 'auto' }}>
+                  {emlQueue.map((item, idx) => (
+                    <button
+                      key={`${item.inquiryNo}-${idx}`}
+                      type="button"
+                      onClick={() => applyParsedEml(item)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '0.32rem 0.6rem',
+                        borderRadius: '0.35rem',
+                        border: emlInfo === item ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                        backgroundColor: emlInfo === item ? '#eff6ff' : '#f8fafc',
+                        fontSize: '0.78rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        gap: '0.5rem',
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <span>#{item.inquiryNo || '-'}</span>
+                      <strong>🏥 {item.clinicName || '-'}</strong>
+                      <span style={{ color: '#64748b' }}>📞 {item.phone || '-'}</span>
+                      <span style={{ color: '#0369a1', marginLeft: 'auto' }}>🧾 {item.rececon || '-'}</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBulkEmlRegister}
+                  style={{
+                    width: '100%',
+                    padding: '0.6rem',
+                    borderRadius: '0.5rem',
+                    border: 'none',
+                    backgroundColor: '#1d4ed8',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✅ 読み込んだ {emlQueue.length} 件のEMLを一括登録する
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
       {/* 📋 コピペ一括入力セクション（反響日 / 顧客名 / 都道府県・市区町村 / 担当(松浦)） */}
       <section className="card" style={{
         padding: '1.25rem 1.5rem',
@@ -401,9 +805,40 @@ export default function ProjectRegistration() {
               />
               {existingCount > 0 && formData.clinicName.length > 2 && (
                 <div style={{ marginTop: '0.5rem', padding: '0.6rem 0.85rem', backgroundColor: '#fffbeb', color: '#92400e', borderRadius: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                  <AlertTriangle size={16} /> 既存顧客が見つかりました（登録済み: {existingCount}件）
+                  <AlertTriangle size={16} /> 既存の可能性がある案件: {duplicateProjects.slice(0, 3).map(p => p.clinicName).join(' / ')}（{existingCount}件）
                 </div>
               )}
+            </div>
+
+            {/* 役職・反響日（2列） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  ご担当役職
+                </label>
+                <input
+                  type="text"
+                  name="contactTitle"
+                  value={formData.contactTitle}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：院長 / 事務長"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  反響日
+                </label>
+                <input
+                  type="date"
+                  name="receivedAt"
+                  value={formData.receivedAt}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                />
+              </div>
             </div>
 
             {/* 担当者・電話番号（2列） */}
@@ -438,6 +873,118 @@ export default function ProjectRegistration() {
               </div>
             </div>
 
+            {/* メール・レセコン（2列） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  メールアドレス
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：info@clinic.jp"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  電子カルテ / レセコン
+                </label>
+                <input
+                  type="text"
+                  name="rececon"
+                  value={formData.rececon}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：ORCA / アニコムレセプター"
+                />
+              </div>
+            </div>
+
+            {/* 住所 */}
+            <div>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                住所{formData.postalCode && <span style={{ fontWeight: 500, color: 'var(--text-muted)', marginLeft: '0.5rem' }}>〒{formData.postalCode}</span>}
+              </label>
+              <input
+                type="text"
+                name="address"
+                value={formData.address}
+                onChange={handleChange}
+                className="input-field"
+                style={{ width: '100%', minHeight: '44px' }}
+                placeholder="例：北海道札幌市中央区宮の森四条5-3-25"
+              />
+            </div>
+
+            {/* お問い合わせ商材・反響番号（2列） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  お問い合わせ商材
+                </label>
+                <input
+                  type="text"
+                  name="products"
+                  value={formData.products}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：テマサックPro スタンドタイプ"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  反響番号（受付番号）
+                </label>
+                <input
+                  type="text"
+                  name="inquiryNo"
+                  value={formData.inquiryNo}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：3543"
+                />
+              </div>
+            </div>
+
+            {/* お問い合わせ種別・お問い合わせ理由（2列） */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  お問い合わせ種別
+                </label>
+                <input
+                  type="text"
+                  name="inquiryTypes"
+                  value={formData.inquiryTypes}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：資料請求,その他ご相談/質問"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  お問い合わせ理由
+                </label>
+                <input
+                  type="text"
+                  name="reason"
+                  value={formData.reason}
+                  onChange={handleChange}
+                  className="input-field"
+                  style={{ width: '100%', minHeight: '44px' }}
+                  placeholder="例：業務の効率化"
+                />
+              </div>
+            </div>
+
             {/* 担当営業 */}
             <div>
               <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
@@ -463,7 +1010,7 @@ export default function ProjectRegistration() {
                 name="memo" 
                 value={formData.memo} 
                 onChange={handleChange} 
-                rows={2} 
+                rows={formData.memo.split('\n').length > 2 ? 5 : 2} 
                 className="input-field"
                 style={{ width: '100%', padding: '0.6rem' }} 
                 placeholder="問い合わせ背景、希望製品、特記事項など"

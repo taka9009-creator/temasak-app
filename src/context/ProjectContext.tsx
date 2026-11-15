@@ -81,6 +81,30 @@ function normalizeLoadedProject(p: Project): Project {
       }
     };
   }
+  if (p.id === 'roster-5057') {
+    return {
+      ...p,
+      email: p.email || 'amitani-ah@wf6.so-net.ne.jp',
+      contactPerson: !p.contactPerson || p.contactPerson === '院長先生 / 事務長様' ? '網谷誠' : p.contactPerson,
+      reservationSystem: p.reservationSystem || 'アニコムレセプター',
+      pipelineMap: {
+        ...(p.pipelineMap || {}),
+        receiptComputer: p.pipelineMap?.receiptComputer || 'アニコムレセプター',
+        deviceType:
+          !p.pipelineMap?.deviceType || p.pipelineMap.deviceType === 'テマサック (標準モデル)'
+            ? 'テマサックPro スタンドタイプ / テマサックPro カウンタータイプ'
+            : p.pipelineMap.deviceType,
+        inquiryType:
+          !p.pipelineMap?.inquiryType || p.pipelineMap.inquiryType === '新規反響'
+            ? '資料請求,その他ご相談/質問'
+            : p.pipelineMap.inquiryType,
+        purpose:
+          !p.pipelineMap?.purpose || p.pipelineMap.purpose === '受付会計の待ち時間短縮・締め作業効率化'
+            ? '業務の効率化（人員不足の為セミセルフレジを検討・実際の使用感を知りたい）'
+            : p.pipelineMap.purpose
+      }
+    };
+  }
   return p;
 }
 
