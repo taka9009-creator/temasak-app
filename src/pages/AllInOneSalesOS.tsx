@@ -47,6 +47,7 @@ import {
   isBtoBDealerProject
 } from '../types';
 import type { Project, QuickCallOutcome, LostReasonType, SalesProgressStage } from '../types';
+import './AllInOneSalesOS.css';
 
 type CallFilter = 'all' | 'callback' | 'absent' | 'uncall' | 'talked' | 'interview' | 'won' | 'archived';
 type AreaFilter = 'all' | '北海道' | '宮城県' | '福島県' | '秋田県' | '岩手県';
@@ -99,6 +100,21 @@ export default function AllInOneSalesOS() {
 
   // ポイント履歴開閉状態
   const [isPtHistoryOpen, setIsPtHistoryOpen] = useState(false);
+
+  // カード表示密度（standard: 標準 / compact: まとめ表示）※スマホは初期値まとめ表示
+  const [cardDensity, setCardDensity] = useState<'standard' | 'compact'>(() => {
+    try {
+      const saved = localStorage.getItem('temasak_card_density');
+      if (saved === 'standard' || saved === 'compact') return saved;
+    } catch (e) {}
+    return typeof window !== 'undefined' && window.innerWidth <= 768 ? 'compact' : 'standard';
+  });
+  const changeCardDensity = (d: 'standard' | 'compact') => {
+    setCardDensity(d);
+    try {
+      localStorage.setItem('temasak_card_density', d);
+    } catch (e) {}
+  };
 
   // クリニック別ポイント制（配点ルール＆バッジ）の表示/非表示切り替え状態
   const [isPointRulesOpen, setIsPointRulesOpen] = useState<boolean>(() => {
@@ -981,7 +997,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
   };
 
   return (
-    <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '4rem' }}>
+    <div className={`sos-root ${cardDensity === 'compact' ? 'sos-compact' : ''}`} style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '4rem' }}>
       {/* トースト通知 */}
       {toastMsg && (
         <div style={{
@@ -1007,7 +1023,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
       )}
 
       {/* 1. 最上部オールインワン・ヘッダーバナー */}
-      <div style={{
+      <div className="sos-hero" style={{
         background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #312e81 100%)',
         borderRadius: '1rem',
         padding: '1.35rem 1.75rem',
@@ -1024,8 +1040,8 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           flexWrap: 'wrap',
           gap: '1rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
+            <div className="sos-hero-icon" style={{
               width: '52px',
               height: '52px',
               borderRadius: '0.85rem',
@@ -1037,31 +1053,47 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             }}>
               <Zap size={28} color="#fbbf24" />
             </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-                <span style={{
-                  backgroundColor: '#f59e0b',
-                  color: '#0f172a',
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  padding: '0.15rem 0.55rem',
-                  borderRadius: '999px',
-                  letterSpacing: '0.04em'
-                }}>
-                  超かんたん統合版
-                </span>
-                <span style={{ fontSize: '0.82rem', color: '#93c5fd', fontWeight: 600 }}>
-                  KPI集計 × 営業案件管理（松浦様名簿 {projects.length}件） × AIナレッジ変換
-                </span>
-              </div>
-              <h1 style={{ margin: '0.2rem 0 0 0', fontSize: '1.55rem', fontWeight: 800, letterSpacing: '-0.02em' }}>
-                テマサック営業OS ワンクリック司令室 ({kpiStats.total}件 / アーカイブ{kpiStats.archivedCount}件)
+            <div style={{ minWidth: 0 }}>
+              <h1 className="sos-hero-title" style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.25 }}>
+                ⚡ 超かんたん司令室 <span style={{ fontSize: '1rem', color: '#93c5fd', fontWeight: 700 }}>（全{projects.length}件）</span>
               </h1>
+              {/* 件数まとめチップ（ひと目で全体把握） */}
+              <div className="sos-hero-chips" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
+                {[
+                  { label: '🏥 営業中', value: projects.filter(p => p.status !== '失注' && !isBtoBDealerProject(p) && normalizeProgressStage(p) !== '受注').length, bg: 'rgba(59,130,246,0.3)', bd: 'rgba(147,197,253,0.55)', mode: 'clinic_only' },
+                  { label: '🎉 受注', value: projects.filter(p => p.status !== '失注' && !isBtoBDealerProject(p) && normalizeProgressStage(p) === '受注').length, bg: 'rgba(16,185,129,0.3)', bd: 'rgba(110,231,183,0.55)', mode: 'won_only' },
+                  { label: '🗄️ 失注', value: kpiStats.clinicArchivedCount, bg: 'rgba(148,163,184,0.3)', bd: 'rgba(203,213,225,0.5)', mode: 'archived_only' },
+                  { label: '🏢 BtoB', value: kpiStats.btob.total, bg: 'rgba(129,140,248,0.3)', bd: 'rgba(165,180,252,0.55)', mode: 'btob_only' }
+                ].map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      setCallFilter('all');
+                      setSegmentViewMode(segmentViewMode === chip.mode ? 'split' : (chip.mode as SegmentViewMode));
+                    }}
+                    title="クリックでこの枠だけ表示（もう一度で全枠表示）"
+                    style={{
+                      backgroundColor: segmentViewMode === chip.mode ? '#ffffff' : chip.bg,
+                      color: segmentViewMode === chip.mode ? '#0f172a' : '#ffffff',
+                      border: `1px solid ${chip.bd}`,
+                      borderRadius: '999px',
+                      padding: '0.2rem 0.65rem',
+                      fontSize: '0.78rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    {chip.label} <span style={{ fontSize: '0.95rem' }}>{chip.value}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* 今日の20ptミッション・ミニゲージ */}
-          <div style={{
+          <div className="sos-mission" style={{
             backgroundColor: 'rgba(255,255,255,0.1)',
             border: '1px solid rgba(255,255,255,0.18)',
             borderRadius: '0.85rem',
@@ -1326,7 +1358,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           flexWrap: 'wrap',
           gap: '0.65rem'
         }}>
-          <div style={{
+          <div className="sos-seg" style={{
             display: 'inline-flex',
             backgroundColor: '#e2e8f0',
             padding: '0.25rem',
@@ -1444,7 +1476,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
         {/* 2-A. 🏥 直販枠 KPI コンテンツ */}
         {kpiSegmentTab === 'clinic' && (
-          <div style={{
+          <div className="sos-kpi-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '0.65rem'
@@ -1572,7 +1604,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
         {/* 2-B. 🏢 BtoB別枠 KPI コンテンツ */}
         {kpiSegmentTab === 'btob' && (
-          <div style={{
+          <div className="sos-kpi-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: '0.65rem'
@@ -1681,7 +1713,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
       </div>
 
       {/* 3. かんたん検索・エリア＆月フィルタバー（コンパクト1行表示） */}
-      <div style={{
+      <div className="sos-filterbar" style={{
         backgroundColor: '#ffffff',
         border: '1px solid #e2e8f0',
         borderRadius: '0.65rem',
@@ -1692,7 +1724,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         gap: '0.4rem 0.6rem'
       }}>
         {/* エリアワンタップピル */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
+        <div className="sos-scroll-x" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexWrap: 'wrap' }}>
           <MapPin size={13} color="#64748b" />
           {(['all', '北海道', '宮城県', '福島県', '秋田県', '岩手県'] as AreaFilter[]).map(area => {
             const count = area === 'all' ? kpiStats.allActiveCount : (kpiStats.byArea[area] || 0);
@@ -1720,7 +1752,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
         </div>
 
         {/* 月フィルタ・検索・追加・リセット（横一列） */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: '1 1 360px', justifyContent: 'flex-end', minWidth: 0 }}>
+        <div className="sos-filter-right" style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: '1 1 360px', justifyContent: 'flex-end', minWidth: 0 }}>
           <select
             value={selectedMonth}
             onChange={e => setSelectedMonth(e.target.value)}
@@ -1978,7 +2010,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
       {/* 4. メイン名簿カードリスト（クリニック営業中枠 ／ クリニック受注別枠 ／ クリニック失注別枠 ／ BtoB別枠 の4枠分離） */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
         {/* 視認性を高めた「対象リスト件数＆別枠切替」ヘッダーバー */}
-        <div style={{
+        <div className="sos-list-header" style={{
           backgroundColor: '#ffffff',
           border: '1px solid #cbd5e1',
           borderLeft: `5px solid ${callFilter === 'archived' ? '#475569' : callFilter === 'won' ? '#059669' : '#1e40af'}`,
@@ -1991,7 +2023,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           gap: '0.75rem',
           boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <div className="sos-list-counts" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
               📋 別枠リスト管理:
             </span>
@@ -2063,9 +2095,36 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.76rem' }}>
+          <div className="sos-list-controls" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.76rem' }}>
+            {/* 表示スタイル切替（標準 / まとめ表示） */}
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#fff7ed', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #fdba74' }}>
+              <span style={{ fontWeight: 800, color: '#9a3412', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示:</span>
+              {[
+                { id: 'compact' as const, label: '📑 まとめ表示' },
+                { id: 'standard' as const, label: '📋 標準表示' }
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => changeCardDensity(opt.id)}
+                  style={{
+                    padding: '0.18rem 0.55rem',
+                    borderRadius: '0.35rem',
+                    border: 'none',
+                    backgroundColor: cardDensity === opt.id ? '#ea580c' : 'transparent',
+                    color: cardDensity === opt.id ? '#ffffff' : '#9a3412',
+                    fontWeight: 800,
+                    fontSize: '0.72rem',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             {/* リスト枠切替ピル（全枠表示 / クリニック営業中のみ / 受注枠のみ / 失注枠のみ / BtoB枠のみ） */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe', flexWrap: 'wrap' }}>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#eef2ff', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #c7d2fe', flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 800, color: '#3730a3', padding: '0 0.25rem', fontSize: '0.72rem' }}>表示枠:</span>
               {[
                 { id: 'split', label: `📊 全枠を別々で表示` },
@@ -2100,7 +2159,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             </div>
 
             {/* クリニックポイント順並び替えピル */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #cbd5e1' }}>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f1f5f9', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #cbd5e1' }}>
               <span style={{ fontWeight: 800, color: '#475569', padding: '0 0.25rem', fontSize: '0.73rem' }}>並び順:</span>
               {[
                 { id: 'date_desc', label: '📅 反響日順' },
@@ -2128,7 +2187,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
             </div>
 
             {/* 架電〜詳細 アクションバー 一括 表示/非表示 切り替えピル */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f0fdf4', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #86efac' }}>
+            <div className="sos-pill-group" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#f0fdf4', padding: '0.2rem 0.35rem', borderRadius: '0.45rem', border: '1px solid #86efac' }}>
               <span style={{ fontWeight: 800, color: '#166534', padding: '0 0.25rem', fontSize: '0.73rem' }}>架電・詳細バー:</span>
               <button
                 type="button"
@@ -2244,6 +2303,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           .map(section => (
             <div
               key={section.id}
+              className="sos-section"
               style={{
                 backgroundColor: section.containerBg,
                 border: `2px solid ${section.borderColor}`,
@@ -2301,7 +2361,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       {section.list.length} {section.unit}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.77rem', color: '#475569', marginTop: '0.2rem', fontWeight: 600 }}>
+                  <div className="sos-section-sub" style={{ fontSize: '0.77rem', color: '#475569', marginTop: '0.2rem', fontWeight: 600 }}>
                     {section.subtitle}
                   </div>
                 </div>
@@ -2364,6 +2424,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
           return (
             <div
               key={project.id}
+              className="sos-card"
               style={{
                 backgroundColor: isArchived ? '#f8fafc' : '#ffffff',
                 border: `1px solid ${callSt.code === 'callback' ? '#fca5a5' : isBtoB ? '#a5b4fc' : '#cbd5e1'}`,
@@ -2390,7 +2451,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
               }}
             >
               {/* 上段：顧客基本情報（左） ＆ 次にやること（右） のゆったり2カラム */}
-              <div style={{
+              <div className="sos-card-top" style={{
                 padding: '0.95rem 1.25rem',
                 display: 'grid',
                 gridTemplateColumns: '1.25fr 1fr',
@@ -2398,8 +2459,8 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 gap: '1.15rem'
               }}>
                 {/* 左カラム：クリニック名・クリニックポイント・エリア・送付/デモ/見積/失注理由バッジ */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                <div className="sos-card-left" style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <div className="sos-card-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
                     {isBtoB && (
                       <span
                         style={{
@@ -2453,7 +2514,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       {callSt.label}
                     </span>
 
-                    <span style={{
+                    <span className="sos-meta-minor" style={{
                       backgroundColor: '#f1f5f9',
                       color: '#1e293b',
                       fontSize: '0.75rem',
@@ -2499,12 +2560,13 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       🖥️ レセコン: {project.pipelineMap?.receiptComputer || project.reservationSystem || '未設定'}
                     </span>
 
-                    <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
+                    <span className="sos-meta-minor" style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>
                       反響日: {project.receivedAt}
                     </span>
                   </div>
 
                   <div
+                    className="sos-card-name"
                     onClick={() => setDetailProjectId(project.id)}
                     style={{
                       fontSize: '1.15rem',
@@ -2522,7 +2584,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   </div>
 
                   {/* ステータス・送付・デモ日付・訪問・ポスティング・相談メール・失注理由バッジ列 */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.45rem', fontSize: '0.76rem', color: '#475569', flexWrap: 'wrap' }}>
+                  <div className="sos-card-badges" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.45rem', fontSize: '0.76rem', color: '#475569', flexWrap: 'wrap' }}>
                     {isArchived && project.lostReason && (
                       <span style={{
                         padding: '0.15rem 0.6rem',
@@ -2790,7 +2852,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                   {/* 8段階 進捗フロー（問合せ → 初動 → デモ → 見積 → 検討 → 後追い → kz送客 → 受注）※案件カンバン＆アクションボタンと自動連動 */}
                   {!isArchived && (
-                    <div style={{
+                    <div className="sos-flow" style={{
                       marginTop: '0.55rem',
                       display: 'flex',
                       alignItems: 'center',
@@ -2877,14 +2939,14 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                 </div>
 
                 {/* 右カラム：次にやること（次アクション）＆ AIアドバイス */}
-                <div style={{
+                <div className="sos-card-next" style={{
                   backgroundColor: '#f8fafc',
                   borderRadius: '0.65rem',
                   padding: '0.7rem 0.95rem',
                   border: '1px solid #e2e8f0'
                 }}>
-                  <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>🎯 次にやること（自動セット）</span>
+                  <div style={{ fontSize: '0.74rem', fontWeight: 700, color: '#64748b', marginBottom: '0.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.4rem' }}>
+                    <span>🎯 次にやること</span>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       {nextAct?.deadline && (
                         <span style={{ color: '#0f766e', fontWeight: 800 }}>
@@ -2906,7 +2968,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     {nextAct ? nextAct.title : 'フォローアップ完了'}
                   </div>
                   {project.aiRecommendation && (
-                    <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.25rem' }}>
+                    <div className="sos-card-ai" style={{ fontSize: '0.75rem', color: '#475569', marginTop: '0.25rem', display: 'flex', alignItems: 'flex-start', gap: '0.25rem' }}>
                       <Sparkles size={13} color="#7c3aed" style={{ flexShrink: 0, marginTop: '2px' }} />
                       <span>{project.aiRecommendation}</span>
                     </div>
@@ -2916,7 +2978,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
               {/* 下段：ワンクリック記録アクションバー（架電: 会話 (+3p) 〜 詳細 の表示/非表示切り替え対応） */}
               {!isCardActionBarOpen(project.id) ? (
-                <div style={{
+                <div className="sos-card-collapsed" style={{
                   backgroundColor: '#f8fafc',
                   borderTop: '1px solid #e2e8f0',
                   padding: '0.4rem 1.25rem',
@@ -2948,7 +3010,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                     }}>
                       🕒 活動履歴 ({(project.activities || []).length})
                     </span>
-                    <span>
+                    <span className="sos-collapsed-hint">
                       {isArchived
                         ? `🗄️ 失注理由: ${project.lostReason || 'その他'}（クリックで復活ボタン等を表示）`
                         : '⚡ 架電・メール・デモ・kz送客・7STEP仕様・現調・詳細メニュー（非表示中）'}
@@ -2974,7 +3036,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       }}
                     >
                       <ChevronDown size={13} />
-                      <span>架電・仕様・詳細ボタンを表示</span>
+                      <span>操作ボタンを表示</span>
                     </button>
                     <button
                       type="button"
@@ -2998,7 +3060,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                   </div>
                 </div>
               ) : (
-              <div style={{
+              <div className="sos-card-actions" style={{
                 backgroundColor: '#f8fafc',
                 borderTop: '1px solid #e2e8f0',
                 padding: '0.55rem 1.25rem',

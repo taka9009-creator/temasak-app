@@ -1,0 +1,298 @@
+/* ==========================================================
+   ⚡ 超かんたん司令室 — 見やすさ＆スマホ対応スタイル
+   （インラインstyleを上書きするため一部 !important を使用）
+   ========================================================== */
+
+.sos-root,
+.sos-root * {
+  box-sizing: border-box;
+}
+
+/* 横スクロール共通 */
+.sos-scroll-x {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.sos-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* カードのホバー */
+.sos-card {
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.sos-card:hover {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* ----------------------------------------------------------
+   📑 まとめ表示（コンパクト）モード：PC・スマホ共通
+   ---------------------------------------------------------- */
+.sos-compact .sos-card-name {
+  order: -1;
+  font-size: 1.02rem !important;
+  margin-bottom: 0.3rem;
+}
+.sos-compact .sos-card-meta {
+  margin-bottom: 0 !important;
+  gap: 0.3rem !important;
+}
+.sos-compact .sos-meta-minor,
+.sos-compact .sos-card-badges,
+.sos-compact .sos-card-ai,
+.sos-compact .sos-section-sub {
+  display: none !important;
+}
+.sos-compact .sos-card-top {
+  padding: 0.6rem 1rem !important;
+  gap: 0.75rem !important;
+}
+.sos-compact .sos-card-next {
+  padding: 0.45rem 0.7rem !important;
+}
+.sos-compact .sos-flow {
+  margin-top: 0.4rem !important;
+  padding: 0.22rem 0.45rem !important;
+}
+.sos-compact .sos-flow button {
+  padding: 0.12rem 0.4rem !important;
+  font-size: 0.68rem !important;
+}
+.sos-compact .sos-section {
+  gap: 0.55rem !important;
+  padding: 0.75rem 0.85rem !important;
+}
+.sos-compact .sos-card-collapsed {
+  padding: 0.3rem 1rem !important;
+}
+
+/* ----------------------------------------------------------
+   タブレット（〜1024px）
+   ---------------------------------------------------------- */
+@media (max-width: 1024px) {
+  .sos-card-top {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ----------------------------------------------------------
+   📱 スマホ（〜768px）
+   ---------------------------------------------------------- */
+@media (max-width: 768px) {
+  .sos-root {
+    gap: 0.75rem !important;
+    padding-bottom: 5rem !important;
+  }
+
+  /* --- ヘッダー --- */
+  .sos-hero {
+    padding: 0.9rem 0.95rem !important;
+    border-radius: 0.85rem !important;
+    gap: 0.6rem !important;
+  }
+  .sos-hero-icon {
+    display: none !important;
+  }
+  .sos-hero-title {
+    font-size: 1.15rem !important;
+  }
+  .sos-hero-chips button {
+    flex: 1 1 calc(50% - 0.4rem);
+    text-align: center;
+    padding: 0.35rem 0.4rem !important;
+    min-height: 36px;
+  }
+  .sos-mission {
+    min-width: 0 !important;
+    width: 100% !important;
+    padding: 0.6rem 0.8rem !important;
+  }
+
+  /* --- KPI --- */
+  .sos-seg {
+    width: 100%;
+    flex-wrap: nowrap !important;
+  }
+  .sos-seg button {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0.5rem 0.4rem !important;
+    min-height: 40px;
+  }
+  .sos-seg button > span:nth-child(2) {
+    display: none;
+  }
+  .sos-seg button > span:first-child {
+    font-size: 0.78rem !important;
+  }
+  .sos-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.45rem !important;
+  }
+  .sos-kpi-grid > div {
+    padding: 0.55rem 0.65rem !important;
+  }
+  .sos-kpi-grid > div > div:first-child {
+    font-size: 0.68rem !important;
+  }
+  .sos-kpi-grid > div > div:first-child > span:last-child {
+    display: none;
+  }
+  .sos-kpi-grid > div > div:nth-child(2) {
+    font-size: 1.25rem !important;
+  }
+  .sos-kpi-grid > div > div:nth-child(3) {
+    font-size: 0.64rem !important;
+  }
+
+  /* --- 検索・フィルタ --- */
+  .sos-filterbar {
+    padding: 0.5rem 0.6rem !important;
+  }
+  .sos-filterbar > .sos-scroll-x {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    width: 100%;
+  }
+  .sos-filterbar > .sos-scroll-x button {
+    padding: 0.32rem 0.65rem !important;
+    min-height: 32px;
+  }
+  .sos-filter-right {
+    flex: 1 1 100% !important;
+    justify-content: stretch !important;
+  }
+  .sos-filter-right input,
+  .sos-filter-right select {
+    min-height: 36px;
+    font-size: 0.85rem !important;
+  }
+
+  /* --- リストヘッダー --- */
+  .sos-list-header {
+    padding: 0.6rem 0.7rem !important;
+    gap: 0.5rem !important;
+  }
+  .sos-list-counts > span:not(:first-child) {
+    display: none !important;
+  }
+  .sos-list-controls {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.4rem !important;
+  }
+  .sos-pill-group {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .sos-pill-group::-webkit-scrollbar {
+    display: none;
+  }
+  .sos-pill-group > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .sos-pill-group button {
+    min-height: 32px;
+  }
+
+  /* --- セクション --- */
+  .sos-section {
+    padding: 0.6rem 0.55rem !important;
+    border-radius: 0.8rem !important;
+    gap: 0.55rem !important;
+  }
+  .sos-section-sub {
+    display: none !important;
+  }
+
+  /* --- カード --- */
+  .sos-card {
+    border-radius: 0.75rem !important;
+  }
+  .sos-card-top {
+    grid-template-columns: 1fr !important;
+    padding: 0.7rem 0.8rem !important;
+    gap: 0.55rem !important;
+  }
+  .sos-card-name {
+    order: -1;
+    font-size: 1.05rem !important;
+    margin-bottom: 0.3rem;
+  }
+  .sos-card-meta {
+    gap: 0.3rem !important;
+  }
+  .sos-card-meta > span {
+    font-size: 0.68rem !important;
+  }
+  .sos-card-badges {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .sos-card-badges::-webkit-scrollbar {
+    display: none;
+  }
+  .sos-card-badges > span {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .sos-flow {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sos-flow::-webkit-scrollbar {
+    display: none;
+  }
+  .sos-flow > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .sos-flow button {
+    min-height: 30px;
+  }
+  .sos-card-next {
+    padding: 0.5rem 0.65rem !important;
+  }
+
+  /* 折りたたみ時の操作バー */
+  .sos-card-collapsed {
+    padding: 0.45rem 0.8rem !important;
+  }
+  .sos-collapsed-hint {
+    display: none;
+  }
+  .sos-card-collapsed button {
+    min-height: 36px;
+  }
+
+  /* 展開時の操作バー：2段を各々横スクロール */
+  .sos-card-actions {
+    padding: 0.5rem 0.6rem !important;
+    flex-direction: column;
+    align-items: stretch !important;
+  }
+  .sos-card-actions > div {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .sos-card-actions > div::-webkit-scrollbar {
+    display: none;
+  }
+  .sos-card-actions > div > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .sos-card-actions button {
+    min-height: 38px;
+  }
+}
