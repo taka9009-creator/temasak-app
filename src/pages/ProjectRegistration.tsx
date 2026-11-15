@@ -273,6 +273,7 @@ export default function ProjectRegistration() {
       furigana: formData.furigana.trim() || undefined,
       inquiryType: formData.inquiryTypes || undefined,
       inquiryReason: formData.reason || undefined,
+      inquiryContent: formData.content.trim() || undefined,
       memo: formData.memo.trim(),
       source: isFromEml ? 'HP資料請求・お問い合わせフォーム' : '直接受付',
       sourceDetail: formData.inquiryNo ? `反響番号: ${formData.inquiryNo}` : undefined,
@@ -295,6 +296,7 @@ export default function ProjectRegistration() {
         deviceType: inferDeviceTypeFromProducts(formData.products) || undefined,
         inquiryType: formData.inquiryTypes || undefined,
         inquiryReason: formData.reason || undefined,
+        inquiryContent: formData.content.trim() || undefined,
         purpose: formData.content
           ? formData.reason
             ? `${formData.reason}（${formData.content}）`
@@ -1003,6 +1005,22 @@ export default function ProjectRegistration() {
                   className="input-field"
                   style={{ width: '100%', minHeight: '44px' }}
                   placeholder="例：業務の効率化"
+                />
+              </div>
+
+              {/* お問い合わせ内容 */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                  お問い合わせ内容
+                </label>
+                <textarea
+                  name="content"
+                  value={formData.content}
+                  onChange={handleChange}
+                  rows={3}
+                  className="input-field"
+                  style={{ width: '100%', padding: '0.6rem' }}
+                  placeholder="例：人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。"
                 />
               </div>
             </div>

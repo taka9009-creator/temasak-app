@@ -410,6 +410,7 @@ export function buildProjectUpdatesFromEml(existing: Project, parsed: ParsedInqu
     product: parsed.products ? `テマサック（${parsed.products}）` : existing.product,
     inquiryType: parsed.inquiryTypes || existing.inquiryType,
     inquiryReason: parsed.reason || existing.inquiryReason,
+    inquiryContent: parsed.content || existing.inquiryContent,
     sourceDetail: existing.sourceDetail || (parsed.inquiryNo ? `反響番号: ${parsed.inquiryNo}` : undefined),
     memo: nextMemo,
     pipelineMap: {
@@ -420,6 +421,7 @@ export function buildProjectUpdatesFromEml(existing: Project, parsed: ParsedInqu
       ...(deviceType ? { deviceType } : {}),
       ...(parsed.inquiryTypes ? { inquiryType: parsed.inquiryTypes } : {}),
       ...(parsed.reason ? { inquiryReason: parsed.reason } : {}),
+      ...(parsed.content ? { inquiryContent: parsed.content } : {}),
       ...(purposeText ? { purpose: purposeText } : {})
     }
   };
@@ -451,6 +453,7 @@ export function createProjectAndActionFromEml(
     furigana: parsed.furigana || undefined,
     inquiryType: parsed.inquiryTypes || undefined,
     inquiryReason: parsed.reason || undefined,
+    inquiryContent: parsed.content || undefined,
     memo: formatEmlMemo(parsed),
     source: 'HP資料請求・お問い合わせフォーム',
     sourceDetail: parsed.inquiryNo ? `反響番号: ${parsed.inquiryNo}` : undefined,
@@ -481,6 +484,7 @@ export function createProjectAndActionFromEml(
       deviceType: inferDeviceTypeFromProducts(parsed.products) || undefined,
       inquiryType: parsed.inquiryTypes || undefined,
       inquiryReason: parsed.reason || undefined,
+      inquiryContent: parsed.content || undefined,
       purpose: parsed.content
         ? parsed.reason
           ? `${parsed.reason}（${parsed.content}）`

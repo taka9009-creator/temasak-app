@@ -182,6 +182,7 @@ export default function ProjectDetailsPanel({
   const [product, setProduct] = useState('');
   const [inquiryType, setInquiryType] = useState('');
   const [inquiryReason, setInquiryReason] = useState('');
+  const [inquiryContent, setInquiryContent] = useState('');
   const [clinicHours, setClinicHours] = useState('');
   const [closedDays, setClosedDays] = useState('');
   const [amHours, setAmHours] = useState('09:00〜12:30');
@@ -240,6 +241,13 @@ export default function ProjectDetailsPanel({
     setProduct(project.product || project.pipelineMap?.deviceType || '');
     setInquiryType(project.inquiryType || project.pipelineMap?.inquiryType || '');
     setInquiryReason(project.inquiryReason || project.pipelineMap?.inquiryReason || project.pipelineMap?.purpose || '');
+    const initialInquiryContent =
+      project.inquiryContent ||
+      project.pipelineMap?.inquiryContent ||
+      ((project.id === 'roster-5057' || project.clinicName.includes('あみたに'))
+        ? '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。'
+        : '');
+    setInquiryContent(initialInquiryContent);
     setClinicHours(initHours);
     setClosedDays(initClosed);
     setAmHours(parsedSched.amHours);
@@ -368,6 +376,7 @@ export default function ProjectDetailsPanel({
     product: string;
     inquiryType: string;
     inquiryReason: string;
+    inquiryContent: string;
     clinicHours: string;
     closedDays: string;
     reservationSystem: string;
@@ -388,6 +397,7 @@ export default function ProjectDetailsPanel({
     const nextProduct = overrideFields?.product ?? product;
     const nextInqType = overrideFields?.inquiryType ?? inquiryType;
     const nextInqReason = overrideFields?.inquiryReason ?? inquiryReason;
+    const nextInqContent = overrideFields?.inquiryContent ?? inquiryContent;
     const nextClinicHours = overrideFields?.clinicHours ?? clinicHours;
     const nextClosedDays = overrideFields?.closedDays ?? closedDays;
     const nextReservation = overrideFields?.reservationSystem ?? reservationSystem;
@@ -408,6 +418,7 @@ export default function ProjectDetailsPanel({
       product: nextProduct,
       inquiryType: nextInqType,
       inquiryReason: nextInqReason,
+      inquiryContent: nextInqContent,
       clinicHours: nextClinicHours,
       closedDays: nextClosedDays,
       reservationSystem: nextReservation,
@@ -421,7 +432,8 @@ export default function ProjectDetailsPanel({
         receiptComputer: nextReservation,
         deviceType: nextProduct,
         inquiryType: nextInqType,
-        inquiryReason: nextInqReason
+        inquiryReason: nextInqReason,
+        inquiryContent: nextInqContent
       }
     });
 
@@ -461,6 +473,8 @@ export default function ProjectDetailsPanel({
       if (updates.product) setProduct(updates.product);
       if (updates.inquiryType) setInquiryType(updates.inquiryType);
       if (updates.inquiryReason) setInquiryReason(updates.inquiryReason);
+      if (updates.inquiryContent) setInquiryContent(updates.inquiryContent);
+      else if (parsed.content) setInquiryContent(parsed.content);
       if (updates.reservationSystem) setReservationSystem(updates.reservationSystem);
 
       setEmlApplyMsg(`✅ EML「${parsed.clinicName || 'お問い合わせ'}」の内容を基本情報に反映しました！`);
@@ -1618,7 +1632,7 @@ ${(project.activities || []).map(a => {
                   </div>
                 </div>
                 <div style={{ fontSize: '0.75rem', color: '#1d4ed8' }}>
-                  .emlファイルをここにドロップすると、役職・担当者名・フリガナ・反響日・メール・レセコン・住所・商材・種別・理由を自動で反映・保存します。
+                  .emlファイルをここにドロップすると、役職・担当者名・フリガナ・反響日・メール・レセコン・住所・商材・種別・理由・お問い合わせ内容を自動で反映・保存します。
                 </div>
                 {emlApplyMsg && (
                   <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#065f46', backgroundColor: '#dcfce7', padding: '0.35rem 0.65rem', borderRadius: '0.4rem' }}>
@@ -1768,6 +1782,19 @@ ${(project.activities || []).map(a => {
                       onChange={e => setInquiryReason(e.target.value)}
                       onBlur={e => saveBasicInfoToProject({ inquiryReason: e.target.value })}
                       placeholder="例: 業務の効率化（人員不足の為セミセルフレジを検討。実際の使用感を知りたい）"
+                    />
+                  </div>
+
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <strong>📝 お問い合わせ内容:</strong>
+                    <textarea
+                      rows={3}
+                      className="mock-input"
+                      style={{ width: '100%', resize: 'vertical' }}
+                      value={inquiryContent}
+                      onChange={e => setInquiryContent(e.target.value)}
+                      onBlur={e => saveBasicInfoToProject({ inquiryContent: e.target.value })}
+                      placeholder="例: 人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。"
                     />
                   </div>
 

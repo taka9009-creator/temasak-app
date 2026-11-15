@@ -157,6 +157,7 @@ export interface PipelineMap {
 
   inquiryType?: string; // 問合種別
   inquiryReason?: string; // お問い合わせ理由
+  inquiryContent?: string; // お問い合わせ内容
   purpose?: string; // 導入目的
 
   // PDF Page 6-7 & Page 10: デジタル化AI導入補助金 ＆ KIZASHI（kz）申請・公的書類3点＋GbizID・2回支払い管理
@@ -789,6 +790,7 @@ export interface Project {
   furigana?: string; // ご担当者・院長フリガナ
   inquiryType?: string; // お問い合わせ種別
   inquiryReason?: string; // お問い合わせ理由
+  inquiryContent?: string; // お問い合わせ内容
   memo: string;
   source: string;
   sourceDetail?: string; // 紹介元など

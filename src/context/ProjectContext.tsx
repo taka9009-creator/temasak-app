@@ -99,6 +99,7 @@ function normalizeLoadedProject(p: Project): Project {
           : 'テマサックPro スタンドタイプ / テマサックPro カウンタータイプ',
       inquiryType: p.inquiryType || '資料請求,その他ご相談/質問',
       inquiryReason: p.inquiryReason || '業務の効率化',
+      inquiryContent: p.inquiryContent || p.pipelineMap?.inquiryContent || '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。',
       pipelineMap: {
         ...(p.pipelineMap || {}),
         director: '網谷誠',
@@ -113,6 +114,7 @@ function normalizeLoadedProject(p: Project): Project {
             ? '資料請求,その他ご相談/質問'
             : p.pipelineMap.inquiryType,
         inquiryReason: p.pipelineMap?.inquiryReason || '業務の効率化',
+        inquiryContent: p.pipelineMap?.inquiryContent || '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。',
         purpose:
           !p.pipelineMap?.purpose || p.pipelineMap.purpose === '受付会計の待ち時間短縮・締め作業効率化'
             ? '業務の効率化（人員不足の為セミセルフレジを検討・実際の使用感を知りたい）'
@@ -127,6 +129,7 @@ function normalizeLoadedProject(p: Project): Project {
   const syncedRececon = p.reservationSystem || p.pipelineMap?.receiptComputer || '';
   const syncedInqType = p.inquiryType || p.pipelineMap?.inquiryType || '';
   const syncedInqReason = p.inquiryReason || p.pipelineMap?.inquiryReason || '';
+  const syncedInqContent = p.inquiryContent || p.pipelineMap?.inquiryContent || ((p.id === 'roster-5057' || (p.clinicName || '').includes('あみたに')) ? '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。' : '');
   let syncedFurigana = p.furigana || p.pipelineMap?.furigana || '';
   if (!syncedFurigana && (syncedPerson.includes('網谷') || syncedDirector.includes('網谷') || (p.clinicName || '').includes('あみたに'))) {
     syncedFurigana = 'アミタニ マコト';
@@ -138,6 +141,7 @@ function normalizeLoadedProject(p: Project): Project {
     reservationSystem: syncedRececon,
     inquiryType: syncedInqType || undefined,
     inquiryReason: syncedInqReason || undefined,
+    inquiryContent: syncedInqContent || undefined,
     furigana: syncedFurigana || undefined,
     pipelineMap: {
       ...(p.pipelineMap || {}),
@@ -145,6 +149,7 @@ function normalizeLoadedProject(p: Project): Project {
       receiptComputer: syncedRececon,
       inquiryType: syncedInqType || undefined,
       inquiryReason: syncedInqReason || undefined,
+      inquiryContent: syncedInqContent || undefined,
       furigana: syncedFurigana || undefined
     }
   };
@@ -336,6 +341,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           furigana: p.furigana || p.pipelineMap?.furigana || (docSnap.id === 'roster-5057' ? 'アミタニ マコト' : ''),
           inquiryType: p.inquiryType || p.inquiry_type || p.pipelineMap?.inquiryType || '',
           inquiryReason: p.inquiryReason || p.inquiry_reason || p.pipelineMap?.inquiryReason || '',
+          inquiryContent: p.inquiryContent || p.inquiry_content || p.pipelineMap?.inquiryContent || (docSnap.id === 'roster-5057' ? '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。' : ''),
           source: p.source || '',
           sourceDetail: p.sourceDetail,
           receivedAt: p.receivedAt || p.received_at || p.created_at || new Date().toISOString(),
@@ -419,6 +425,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
               furigana: existing.furigana || rosterProj.furigana || (rosterProj.id === 'roster-5057' ? 'アミタニ マコト' : ''),
               inquiryType: existing.inquiryType || rosterProj.inquiryType || '',
               inquiryReason: existing.inquiryReason || rosterProj.inquiryReason || '',
+              inquiryContent: existing.inquiryContent || rosterProj.inquiryContent || (rosterProj.id === 'roster-5057' ? '人員不足の為セミセルフレジを検討しています。導入について、実際の使用感を知りたいです。' : ''),
               status: isFirstRecoverySync ? rosterProj.status : existing.status,
               lostReason: isFirstRecoverySync ? rosterProj.lostReason : (existing.lostReason || rosterProj.lostReason),
               probability: isFirstRecoverySync ? rosterProj.probability : existing.probability,
