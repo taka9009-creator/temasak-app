@@ -368,7 +368,7 @@ export default function AllInOneSalesOS() {
     if (stage === 'kz送客') {
       return {
         code: 'interview',
-        label: '💰 kz送客済（補助金採択後に受注）',
+        label: '💰 kz送客済（補助金活用）',
         badgeBg: '#cffafe',
         badgeColor: '#0f766e',
         borderColor: '#67e8f9'
@@ -756,8 +756,8 @@ export default function AllInOneSalesOS() {
       '見積書送付': '見積',
       '相談メール': '検討',
       '後追いメール': '後追い',
-      'kz送客': 'kz送客（採択後に受注）',
-      '受注': '受注'
+      'kz送客': 'kz送客（補助金活用・採択後に受注）',
+      '受注': '受注（ご契約確定）'
     };
     const nextStageLabel = stageMap[outcome];
 
@@ -773,7 +773,9 @@ export default function AllInOneSalesOS() {
     handleStatusChange(p.id, stage);
     triggerToast(
       stage === 'kz送客'
-        ? `💰 「${p.clinicName}」を【kz送客（補助金コンサル送客・採択後に受注）】へ更新しました（カンバン＆活動履歴と同期済）`
+        ? `💰 「${p.clinicName}」を【kz送客（補助金利用時・コンサル送客）】へ更新しました（※補助金なし通常導入の場合は直接「受注」へ進めます）`
+        : stage === '受注'
+        ? `🎉 「${p.clinicName}」を【受注（通常ご契約 / 補助金採択）】へ更新しました（カンバン＆活動履歴と同期済）`
         : `🚀 「${p.clinicName}」の進捗フロー・カンバン・活動履歴を【${stage}】に同期更新しました`
     );
   };
@@ -3039,10 +3041,10 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       </span>
                     )}
 
-                    {hasKzReferral && (
+                    {hasKzReferral && project.pipelineMap?.subsidyName !== '補助金なし（通常導入）' && (
                       <span
                         onClick={() => openDemoDatePicker(project, 'kz送客')}
-                        title="補助金コンサルタント（kz）へ送客済・採択後に受注（クリックで送客日を選択・更新）"
+                        title="補助金利用案件：コンサルタント（kz）へ送客済（※補助金なし通常導入の場合は直接「受注」へ進めます）"
                         style={{
                           padding: '0.14rem 0.6rem',
                           borderRadius: '0.3rem',
@@ -3053,14 +3055,14 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                           cursor: 'pointer'
                         }}
                       >
-                        💰 kz送客済（採択待ち）{project.kzReferralDate ? ` (${project.kzReferralDate.slice(5)})` : ''}
+                        💰 kz送客済{project.kzReferralDate ? ` (${project.kzReferralDate.slice(5)})` : ''}
                       </span>
                     )}
 
                     {hasOrder && (
                       <span
                         onClick={() => openDemoDatePicker(project, '受注')}
-                        title="クリックして受注日を選択・更新"
+                        title="クリックして受注日を選択・更新（通常導入・直接ご契約／補助金採択のどちらも対応）"
                         style={{
                           padding: '0.14rem 0.6rem',
                           borderRadius: '0.3rem',
@@ -3071,7 +3073,8 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                           cursor: 'pointer'
                         }}
                       >
-                        🎉 受注済{project.orderDate ? ` (${project.orderDate.slice(5)})` : ''}
+                        🎉 受注済{project.pipelineMap?.subsidyName === '補助金なし（通常導入）' ? '（通常導入）' : ''}
+                        {project.orderDate ? ` (${project.orderDate.slice(5)})` : ''}
                       </span>
                     )}
 
@@ -3175,7 +3178,9 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                               onClick={() => handleSelectProgressStage(project, stage)}
                               title={
                                 isKz
-                                  ? '進捗ステージを「kz送客（補助金コンサルタント送客・採択後に受注）」に変更（案件カンバンともリアルタイム連動）'
+                                  ? '補助金利用クリニック向け：コンサルタント（kz）送客へ変更（※補助金を使わない通常導入の場合は直接「受注」へ進めます）'
+                                  : stage === '受注'
+                                  ? '進捗ステージを「受注」に変更（通常導入・直接ご契約／補助金採択後のどちらも対応・カンバン連動）'
                                   : `進捗ステージを「${stage}」に変更（案件カンバン＆下のアクションボタンとも自動連動します）`
                               }
                               style={{
@@ -3740,7 +3745,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                     <button
                       onClick={() => openDemoDatePicker(project, 'kz送客')}
-                      title="「kz送客 (+5p)」補助金コンサルタントへの送客日を選択して記録（進捗: kz送客へ連動・採択後に受注）"
+                      title="補助金利用クリニック向け：コンサルタント（kz）送客 (+5p) ※補助金を使わない通常導入の場合は直接「受注」へ進めます"
                       style={{
                         padding: '0.32rem 0.65rem',
                         borderRadius: '0.45rem',
@@ -3760,7 +3765,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
 
                     <button
                       onClick={() => openDemoDatePicker(project, '受注')}
-                      title="「受注 (+10p)」の受注日を選択して記録（進捗: 受注へ連動）"
+                      title="「受注 (+10p)」の受注日を選択して記録（通常導入・直接ご契約／補助金採択後のどちらも進捗: 受注へ連動）"
                       style={{
                         padding: '0.32rem 0.7rem',
                         borderRadius: '0.45rem',
@@ -3857,7 +3862,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       setDetailInitialTab('prepStatus');
                       setDetailProjectId(project.id);
                     }}
-                    title="PDF準拠：kz補助金・公的書類3点＋GbizID・2回お支払い管理を開く"
+                    title="ご契約ルート（通常導入／補助金活用）・kz補助金・公的書類3点＋GbizID・2回お支払い管理を開く"
                     style={{
                       padding: '0.38rem 0.62rem',
                       borderRadius: '0.45rem',
@@ -3869,7 +3874,7 @@ ${isNewOpen ? '【新規ご開業向けの特別サポート】\nご開業前の
                       cursor: 'pointer'
                     }}
                   >
-                    💰 kz書類・支払
+                    💰 契約・kz書類・支払
                   </button>
 
                   <button

@@ -1116,7 +1116,7 @@ ${(project.activities || []).map(a => {
           <div className="tabs-container" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.45rem', paddingBottom: '0.6rem' }}>
             <button className={`tab-button ${activeTab === 'basicInfo' ? 'active' : ''}`} onClick={() => setActiveTab('basicInfo')}>📋 基本情報</button>
             <button className={`tab-button ${activeTab === 'deviceInfo' ? 'active' : ''}`} onClick={() => setActiveTab('deviceInfo')}>🎨 7 STEP 仕様選択</button>
-            <button className={`tab-button ${activeTab === 'prepStatus' ? 'active' : ''}`} onClick={() => setActiveTab('prepStatus')}>💰 kz補助金・書類3点・2回支払</button>
+            <button className={`tab-button ${activeTab === 'prepStatus' ? 'active' : ''}`} onClick={() => setActiveTab('prepStatus')}>💰 契約・kz補助金・書類・支払</button>
             <button className={`tab-button ${activeTab === 'cashlessStatus' ? 'active' : ''}`} onClick={() => setActiveTab('cashlessStatus')}>💳 キャッシュレス・ジャックス審査</button>
             <button className={`tab-button ${activeTab === 'installation' ? 'active' : ''}`} onClick={() => setActiveTab('installation')}>🔌 現地調査 確認1〜5</button>
             <button className={`tab-button ${activeTab === 'activities' ? 'active' : ''}`} onClick={() => setActiveTab('activities')}>🕒 活動履歴 ({(project.activities || []).length})</button>
@@ -1891,14 +1891,31 @@ ${(project.activities || []).map(a => {
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                          <strong style={{ fontSize: '0.8rem', color: '#047857' }}>💰 kz補助金・公的書類</strong>
+                          <strong style={{ fontSize: '0.8rem', color: '#047857' }}>💰 ご契約・kz補助金・公的書類</strong>
                           <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#047857' }}>
-                            書類 {gate.docsReadyCount}/4 ➔
+                            {pm.subsidyName === '補助金なし（通常導入）' ? '通常導入 ➔' : `書類 ${gate.docsReadyCount}/4 ➔`}
                           </span>
                         </div>
                         <div style={{ fontSize: '0.74rem', color: '#334155', lineHeight: 1.5 }}>
-                          <div>・現在フェーズ: <strong>{gate.introPhase}</strong> ({pm.kzGrantAdopted ? '採択・受注済' : '進行中'})</div>
-                          <div>・①KIZASHI報酬: <strong>{pm.payment1KzFeeStatus || '未請求'}</strong></div>
+                          <div>
+                            ・現在フェーズ: <strong>{gate.introPhase}</strong> (
+                            {project.status === '受注' || pm.kzGrantAdopted
+                              ? pm.subsidyName === '補助金なし（通常導入）'
+                                ? '通常導入・受注済'
+                                : '採択・受注済'
+                              : pm.subsidyName === '補助金なし（通常導入）'
+                              ? '通常導入（補助金なし）'
+                              : '進行中'}
+                            )
+                          </div>
+                          <div>
+                            ・①KIZASHI報酬:{' '}
+                            <strong>
+                              {pm.subsidyName === '補助金なし（通常導入）'
+                                ? '対象外（補助金なし）'
+                                : pm.payment1KzFeeStatus || '未請求'}
+                            </strong>
+                          </div>
                           <div>・②本体代金支払: <strong>{pm.payment2TemasakStatus || '未請求'}</strong></div>
                         </div>
                       </div>
@@ -2413,18 +2430,136 @@ ${(project.activities || []).map(a => {
                   }
                 };
 
+                const isNoSubsidy = pm.subsidyName === '補助金なし（通常導入）';
+                const isWonOrAdopted = project.status === '受注' || !!pm.kzGrantAdopted;
+
                 return (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div>
                         <h3 style={{ margin: 0, color: '#0f172a' }}>
-                          💰 デジタル化AI導入補助金 ＆ KIZASHI（kz）公的書類3点・2回お支払い管理
+                          💰 ご契約ルート・デジタル化AI導入補助金・2回お支払い管理
                         </h3>
                         <div style={{ fontSize: '0.76rem', color: '#475569', marginTop: '0.2rem' }}>
-                          PDF Page 2・6・7・10 準拠：公的書類3点＋GbizID、KIZASHI申請ステップ、2回のお支払いを一元管理します。
+                          補助金活用（KIZASHI経由➔採択後受注）または補助金なし（通常導入・リース等で直接受注）の双方を管理します。
                         </div>
                       </div>
                     </div>
+
+                    {/* 導入ルート切替 ＆ ワンクリック受注確定クイックバー */}
+                    <div style={{
+                      padding: '0.85rem 1rem',
+                      borderRadius: '0.65rem',
+                      backgroundColor: isNoSubsidy ? '#ecfdf5' : '#f0fdfa',
+                      border: isNoSubsidy ? '1.5px solid #10b981' : '1.5px solid #0d9488',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem'
+                    }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 900, color: '#0f172a' }}>
+                          🔀 導入ルート選択（補助金利用 ／ 補助金なし・通常導入）
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              savePrep(
+                                {
+                                  subsidyName:
+                                    isNoSubsidy || !pm.subsidyName
+                                      ? 'インボイス枠（インボイス対応類型）★注目'
+                                      : pm.subsidyName
+                                },
+                                '🤝 導入ルートを「補助金活用ルート（KIZASHI経由）」に設定しました'
+                              )
+                            }
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '0.45rem',
+                              border: !isNoSubsidy ? '2px solid #0f766e' : '1px solid #cbd5e1',
+                              backgroundColor: !isNoSubsidy ? '#0f766e' : '#ffffff',
+                              color: !isNoSubsidy ? '#ffffff' : '#334155',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🤝 補助金活用ルート（kz経由）
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              savePrep(
+                                { subsidyName: '補助金なし（通常導入）' },
+                                '🏥 導入ルートを「補助金なし・通常導入ルート」に設定しました（kz送客・公的書類不要で受注可能）'
+                              )
+                            }
+                            style={{
+                              padding: '0.35rem 0.75rem',
+                              borderRadius: '0.45rem',
+                              border: isNoSubsidy ? '2px solid #059669' : '1px solid #cbd5e1',
+                              backgroundColor: isNoSubsidy ? '#059669' : '#ffffff',
+                              color: isNoSubsidy ? '#ffffff' : '#334155',
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            🏥 補助金なし・通常導入ルート
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            savePrep(
+                              { kzGrantAdopted: !isWonOrAdopted },
+                              !isWonOrAdopted
+                                ? isNoSubsidy
+                                  ? '🎉 通常導入（補助金なし）での受注を確定しました！（PHASE 3へ連動）'
+                                  : '🎉 補助金交付決定（採択）・受注を確定しました！（PHASE 3へ連動）'
+                                : '🔄 受注確定を解除し、前のフェーズへ戻しました'
+                            )
+                          }
+                          style={{
+                            padding: '0.45rem 0.95rem',
+                            borderRadius: '0.5rem',
+                            border: isWonOrAdopted ? '2px solid #047857' : '2px solid #10b981',
+                            background: isWonOrAdopted
+                              ? 'linear-gradient(135deg, #059669, #047857)'
+                              : '#ffffff',
+                            color: isWonOrAdopted ? '#ffffff' : '#065f46',
+                            fontSize: '0.78rem',
+                            fontWeight: 900,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 6px rgba(16, 185, 129, 0.2)'
+                          }}
+                        >
+                          {isWonOrAdopted
+                            ? '✓ 受注確定済（クリックで解除）'
+                            : '🎉 受注確定（通常ご契約 ／ 交付決定）'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isNoSubsidy && (
+                      <div style={{
+                        padding: '0.55rem 0.85rem',
+                        borderRadius: '0.5rem',
+                        backgroundColor: '#fef3c7',
+                        border: '1px solid #fcd34d',
+                        color: '#92400e',
+                        fontSize: '0.76rem',
+                        fontWeight: 800
+                      }}>
+                        💡 現在「補助金なし（通常導入）」が選択されています。公的書類3点・GbizID・KIZASHI報酬の支払いは対象外（不要）となり、上記のボタンや進捗フローから直接「🎉 受注（PHASE 3）」へ進行できます。
+                      </div>
+                    )}
 
                     {cashlessSaveMsg && (
                       <div style={{
@@ -2692,8 +2827,12 @@ ${(project.activities || []).map(a => {
                           },
                           {
                             key: 'kzGrantAdopted' as const,
-                            title: '🎉 交付決定（採択決定）➔ 受注確定',
-                            desc: '補助金の交付決定（採択）通知完了！PHASE 3（注文書・設置調整）へ進行'
+                            title: isNoSubsidy
+                              ? '🎉 ご契約・発注確定（通常導入）➔ 受注'
+                              : '🎉 交付決定（採択）／ご契約 ➔ 受注確定',
+                            desc: isNoSubsidy
+                              ? '補助金なし（通常導入・リース等）でのご契約完了！PHASE 3（注文書・設置調整）へ進行'
+                              : '補助金の交付決定（採択）またはご契約完了！PHASE 3（注文書・設置調整）へ進行'
                           }
                         ].map(st => {
                           const done = !!pm[st.key];
@@ -2721,19 +2860,36 @@ ${(project.activities || []).map(a => {
                       </div>
                     </div>
 
-                    {/* PDF Page 10: お支払いは「交付決定時」と「設置完了時」の2回に分かれます */}
+                    {/* PDF Page 10: お支払いは補助金活用時「交付決定時＋設置完了時」、通常導入時は「設置完了時等」 */}
                     <div className="card" style={{ padding: '1rem', border: '1px solid #cbd5e1' }}>
                       <strong style={{ fontSize: '0.9rem', color: '#0f172a', display: 'block', marginBottom: '0.75rem' }}>
-                        💴 2回のお支払い管理（PDF P.10：「交付決定時」と「設置完了時」の2段階）
+                        {isNoSubsidy
+                          ? '💴 お支払い管理（通常導入：補助金利用なし／KIZASHI報酬は対象外）'
+                          : '💴 2回のお支払い管理（PDF P.10：補助金利用時は「交付決定時」と「設置完了時」の2段階）'}
                       </strong>
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.8rem' }}>
-                        <div style={{ padding: '0.85rem', borderRadius: '0.6rem', backgroundColor: '#fff7ed', border: '1.5px solid #fb923c' }}>
-                          <div style={{ fontSize: '0.84rem', fontWeight: 900, color: '#c2410c' }}>
+                        <div style={{
+                          padding: '0.85rem',
+                          borderRadius: '0.6rem',
+                          backgroundColor: isNoSubsidy ? '#f8fafc' : '#fff7ed',
+                          border: isNoSubsidy ? '1.5px dashed #cbd5e1' : '1.5px solid #fb923c',
+                          opacity: isNoSubsidy ? 0.72 : 1
+                        }}>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 900, color: isNoSubsidy ? '#64748b' : '#c2410c' }}>
                             1回目のお支払い｜⑦ 補助金申請コンサルタント（KIZASHI）報酬
+                            {isNoSubsidy && '（通常導入のため対象外）'}
                           </div>
-                          <div style={{ fontSize: '0.72rem', color: '#9a3412', marginTop: '0.2rem', fontWeight: 700 }}>
-                            ■ ご請求タイミング：補助金の「交付決定（採択決定）」時点<br />
-                            ※【ご注意】KIZASHIへのお支払い時期は、テマサック本体の設置前になります。
+                          <div style={{ fontSize: '0.72rem', color: isNoSubsidy ? '#64748b' : '#9a3412', marginTop: '0.2rem', fontWeight: 700 }}>
+                            {isNoSubsidy ? (
+                              <>
+                                ■ 通常導入（補助金なし）をご選択中のため、KIZASHI報酬のお支払いは不要です。
+                              </>
+                            ) : (
+                              <>
+                                ■ ご請求タイミング：補助金の「交付決定（採択決定）」時点<br />
+                                ※【ご注意】KIZASHIへのお支払い時期は、テマサック本体の設置前になります。
+                              </>
+                            )}
                           </div>
                           <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.55rem' }}>
                             {(['未請求', '請求書発送済', '支払完了'] as const).map(st => {
@@ -3420,8 +3576,8 @@ ${(project.activities || []).map(a => {
                           <option value="見積書送付 (+5p)|5">見積書送付 (+5p) [➔ 見積]</option>
                           <option value="相談メール (+3p)|3">相談メール (+3p) [➔ 検討]</option>
                           <option value="後追いメール (+2p)|2">後追いメール (+2p) [➔ 後追い]</option>
-                          <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客]</option>
-                          <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注]</option>
+                          <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客（補助金利用時）]</option>
+                          <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注（通常契約 / 補助金採択）]</option>
                           <option value="訪問 (+3p)|3">訪問 (+3p)</option>
                           <option value="ポスティング (+2p)|2">ポスティング (+2p)</option>
                           <option value="資料・メール送付 (+2p)|2">資料・メール送付 (+2p)</option>
@@ -3565,8 +3721,8 @@ ${(project.activities || []).map(a => {
                                   <option value="見積書送付 (+5p)|5">見積書送付 (+5p) [➔ 見積]</option>
                                   <option value="相談メール (+3p)|3">相談メール (+3p) [➔ 検討]</option>
                                   <option value="後追いメール (+2p)|2">後追いメール (+2p) [➔ 後追い]</option>
-                                  <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客]</option>
-                                  <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注]</option>
+                                  <option value="💰 kz送客 (+5p)|5">💰 kz送客 (+5p) [➔ kz送客（補助金利用時）]</option>
+                                  <option value="🎉 受注確定 (+10p)|10">🎉 受注確定 (+10p) [➔ 受注（通常契約 / 補助金採択）]</option>
                                   <option value="訪問 (+3p)|3">訪問 (+3p)</option>
                                   <option value="ポスティング (+2p)|2">ポスティング (+2p)</option>
                                   <option value="🔄 ステージ移動: 問合せ|0">🔄 ステージ移動: 問合せ (0p)</option>

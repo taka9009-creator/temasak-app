@@ -100,12 +100,11 @@ export default function ProjectKanban({
   };
 
   const handleMoveIntroPhase = (project: Project, targetPhase: IntroPhaseId) => {
-    // updateProject 内の autoSyncProjectUpdates により、introPhase 変更時に営業8段階ステータス（kz送客/受注）・日付・活動履歴も全自動連動
+    // updateProject 内の autoSyncProjectUpdates により、introPhase 変更時に営業8段階ステータス（kz送客/検討/受注）・日付・活動履歴も全自動連動
     updateProject(project.id, {
       pipelineMap: {
         ...(project.pipelineMap || {}),
-        introPhase: targetPhase,
-        kzGrantAdopted: targetPhase === 'PHASE3' || targetPhase === 'PHASE4' ? true : false
+        introPhase: targetPhase
       }
     });
   };
@@ -621,7 +620,9 @@ export default function ProjectKanban({
                           }}>
                             <Trophy size={10} /> {clinicPts}p
                           </span>
-                          {(currentStage === 'kz送客' || project.kzReferralDate || project.memo?.includes('kz送客済')) && !isArchived && (
+                          {(currentStage === 'kz送客' || project.kzReferralDate || project.memo?.includes('kz送客済')) &&
+                            !isArchived &&
+                            project.pipelineMap?.subsidyName !== '補助金なし（通常導入）' && (
                             <span style={{
                               backgroundColor: '#cffafe',
                               color: '#0f766e',
@@ -630,7 +631,7 @@ export default function ProjectKanban({
                               fontWeight: 800,
                               padding: '0.08rem 0.35rem',
                               borderRadius: '0.25rem'
-                            }} title="補助金コンサルタント（kz）送客済・採択後に受注">
+                            }} title="補助金利用案件：コンサルタント（kz）送客済・採択後に受注（※通常導入は直接受注）">
                               💰 kz送客済
                             </span>
                           )}
@@ -694,10 +695,22 @@ export default function ProjectKanban({
                       {/* PDF準拠：7 STEP仕様・公的書類・クレカ審査・kz報酬・現地調査 進捗＆ストッパーバッジ */}
                       {!isArchived && (() => {
                         const gate = getProjectSpecAndGateSummary(project);
+                        const pm = project.pipelineMap || {};
+                        const isNoSubsidy = pm.subsidyName === '補助金なし（通常導入）';
+                        const isKzSubsidyUsed =
+                          !isNoSubsidy &&
+                          (currentStage === 'kz送客' ||
+                            !!project.kzReferralDate ||
+                            !!pm.kzStep1ConsentSent ||
+                            !!pm.kzStep2Contacted ||
+                            !!pm.kzStep3Applied ||
+                            !!pm.kzGrantAdopted ||
+                            !!project.memo?.includes('kz送客済'));
                         const showExtendedBadges =
                           kanbanMode === 'intro_4phase' ||
                           currentStage === 'kz送客' ||
                           currentStage === '受注' ||
+                          isNoSubsidy ||
                           gate.specCompletedCount > 0 ||
                           gate.docsReadyCount > 0 ||
                           gate.surveyReadyCount > 0;
@@ -716,17 +729,31 @@ export default function ProjectKanban({
                             }}>
                               🎨 仕様 {gate.specCompletedCount}/7
                             </span>
-                            <span style={{
-                              fontSize: '0.63rem',
-                              fontWeight: 800,
-                              padding: '0.08rem 0.35rem',
-                              borderRadius: '0.25rem',
-                              backgroundColor: gate.docsReadyCount === 4 ? '#dcfce7' : '#ecfeff',
-                              color: gate.docsReadyCount === 4 ? '#166534' : '#0f766e',
-                              border: '1px solid #a5f3fc'
-                            }}>
-                              📄 書類 {gate.docsReadyCount}/4
-                            </span>
+                            {isNoSubsidy ? (
+                              <span style={{
+                                fontSize: '0.63rem',
+                                fontWeight: 800,
+                                padding: '0.08rem 0.35rem',
+                                borderRadius: '0.25rem',
+                                backgroundColor: '#ecfdf5',
+                                color: '#065f46',
+                                border: '1px solid #6ee7b7'
+                              }} title="補助金を使わない通常導入（自己資金・リース等）ルート">
+                                🏥 通常導入(補助金なし)
+                              </span>
+                            ) : (
+                              <span style={{
+                                fontSize: '0.63rem',
+                                fontWeight: 800,
+                                padding: '0.08rem 0.35rem',
+                                borderRadius: '0.25rem',
+                                backgroundColor: gate.docsReadyCount === 4 ? '#dcfce7' : '#ecfeff',
+                                color: gate.docsReadyCount === 4 ? '#166534' : '#0f766e',
+                                border: '1px solid #a5f3fc'
+                              }}>
+                                📄 書類 {gate.docsReadyCount}/4
+                              </span>
+                            )}
                             <span style={{
                               fontSize: '0.63rem',
                               fontWeight: 800,
@@ -751,7 +778,7 @@ export default function ProjectKanban({
                                 ⏳ QR長期化注意
                               </span>
                             )}
-                            {(currentStage === '受注' || gate.introPhase === 'PHASE3' || gate.introPhase === 'PHASE4') && (
+                            {(currentStage === '受注' || gate.introPhase === 'PHASE3' || gate.introPhase === 'PHASE4') && isKzSubsidyUsed && (
                               <span style={{
                                 fontSize: '0.63rem',
                                 fontWeight: 800,
@@ -760,7 +787,7 @@ export default function ProjectKanban({
                                 backgroundColor: gate.kzFeePaid ? '#dcfce7' : '#fee2e2',
                                 color: gate.kzFeePaid ? '#166534' : '#b91c1c',
                                 border: '1px solid #fca5a5'
-                              }} title="KIZASHI（コンサルタント）報酬はテマサック本体設置前にお支払いが必要">
+                              }} title="補助金利用時：KIZASHI（コンサルタント）報酬はテマサック本体設置前にお支払いが必要">
                                 {gate.kzFeePaid ? '💰 kz報酬支払済' : '⚠️ kz報酬(設置前)'}
                               </span>
                             )}

@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import ProjectList from '../components/ProjectList';
 import ProjectKanban from '../components/ProjectKanban';
 import ProjectDetailsPanel from '../components/ProjectDetailsPanel';
 import ProjectCalendar from '../components/ProjectCalendar';
 import { useProjects } from '../context/ProjectContext';
-import { LayoutList, KanbanSquare, Archive, CalendarDays, Search, X, RotateCcw, Trash2 } from 'lucide-react';
+import { KanbanSquare, Archive, CalendarDays, Search, X, RotateCcw, Trash2 } from 'lucide-react';
 import { useWorkflow } from '../context/WorkflowContext';
 import { SALES_PROGRESS_FLOW, normalizeProgressStage, isBtoBDealerProject } from '../types';
 import type { LostReasonType, Project } from '../types';
@@ -23,7 +22,7 @@ export default function ProjectManagement() {
   } = useProjects();
   const { kanbanColumns } = useWorkflow();
 
-  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'archive' | 'calendar'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'archive' | 'calendar'>('kanban');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
@@ -105,7 +104,7 @@ export default function ProjectManagement() {
       <div className="pm-header-container" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginBottom: '1.1rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>案件カンバン・一覧・カレンダー管理</h2>
+            <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>案件カンバン・カレンダー管理</h2>
             <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-muted)', fontWeight: 600 }}>
               全 {projects.length} 件（営業中: {activeProjects.length}件 / アーカイブ失注: {archivedProjects.length}件）
             </p>
@@ -118,12 +117,6 @@ export default function ProjectManagement() {
               onClick={() => setViewMode('kanban')}
             >
               <KanbanSquare size={16} /> カンバン ({activeProjects.length})
-            </button>
-            <button
-              style={{ minHeight: '42px', padding: '0.45rem 0.95rem', border: 'none', background: viewMode === 'list' ? 'var(--primary)' : 'transparent', color: viewMode === 'list' ? 'white' : 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.85rem' }}
-              onClick={() => setViewMode('list')}
-            >
-              <LayoutList size={16} /> 一覧 ({activeProjects.length})
             </button>
             <button
               style={{ minHeight: '42px', padding: '0.45rem 0.95rem', border: 'none', background: viewMode === 'calendar' ? 'var(--primary)' : 'transparent', color: viewMode === 'calendar' ? 'white' : 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 700, fontSize: '0.85rem' }}
@@ -171,15 +164,6 @@ export default function ProjectManagement() {
           )}
         </div>
       </div>
-
-      {viewMode === 'list' && (
-        <ProjectList
-          projects={activeProjects}
-          actions={actions}
-          onProjectClick={(p) => setSelectedProjectId(p.id)}
-          onDeleteProject={handleDeleteProject}
-        />
-      )}
 
       {viewMode === 'archive' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

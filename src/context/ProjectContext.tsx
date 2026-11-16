@@ -841,7 +841,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           newPriority = '高';
           kzReferralDate = targetDate;
           actType = '💰 kz送客 (+5p)';
-          actContent = `【kz送客】補助金コンサルタント（kz）へ送客完了・採択後に受注（送客日: ${targetDate} / +5p）${note ? ` - ${note}` : ''}`;
+          actContent = `【kz送客（補助金利用）】コンサルタント（kz）へ送客完了・採択後に受注（送客日: ${targetDate} / +5p）${note ? ` - ${note}` : ''}`;
           if (updatedMemo.includes('kz送客済')) {
             updatedMemo = updatedMemo.replace(/kz送客済\([^)]*\)/, `kz送客済(${targetDate})`);
           } else {
@@ -853,7 +853,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           newPriority = '高';
           orderDate = targetDate;
           actType = '🎉 受注確定 (+10p)';
-          actContent = `【受注】ご契約・発注確定（受注日: ${targetDate} / +10p）${note ? ` - ${note}` : ''}`;
+          const isNoSubsidy = p.pipelineMap?.subsidyName === '補助金なし（通常導入）';
+          actContent = isNoSubsidy
+            ? `【🎉 受注確定】通常導入（補助金なし）でのご契約・発注確定（受注日: ${targetDate} / +10p）${note ? ` - ${note}` : ''}`
+            : `【🎉 受注確定】ご契約・発注確定（通常導入または補助金採択 / 受注日: ${targetDate} / +10p）${note ? ` - ${note}` : ''}`;
           if (updatedMemo.includes('受注済')) {
             updatedMemo = updatedMemo.replace(/受注済\([^)]*\)/, `受注済(${targetDate})`);
           } else {
@@ -1010,7 +1013,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         nextPriority = '高';
       } else if (callOutcome === '後追いメール') {
         nextTitle = '後追いメール後の状況確認コール ＆ 最終意思決定フォロー';
-        nextMemo = '後追いメール送付済（+2p / 進捗: 後追い）。導入判断の時期やご不明点を確認し、kz送客または受注へ繋げる。';
+        nextMemo = '後追いメール送付済（+2p / 進捗: 後追い）。導入判断の時期やご不明点を確認し、通常ご契約（直接受注）または補助金活用（kz送客）へ繋げる。';
         nextDeadline = format(addDays(new Date(), 3), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === 'kz送客') {
@@ -1019,8 +1022,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         nextDeadline = format(addDays(new Date(), 5), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === '受注') {
-        nextTitle = '【受注・PHASE3〜4】⑦KIZASHI報酬支払確認(設置前必須) ＆ 注文書作成・クレカ審査通過・現地調査5項目確認';
-        nextMemo = `受注・交付決定確定（受注日: ${targetDate} / +10p）。本体設置前の⑦KIZASHI報酬支払確認、クレジット審査通過確認（設置前提条件）、現地調査5項目（レセコンIP・プロバイダ書類）および搬入設置日程の確定を進める。`;
+        const curProj = projects.find(p => p.id === projectId);
+        const isSubsidyKzRoute =
+          curProj?.pipelineMap?.subsidyName !== '補助金なし（通常導入）' &&
+          (!!curProj?.kzReferralDate ||
+            !!curProj?.pipelineMap?.kzStep1ConsentSent ||
+            !!curProj?.pipelineMap?.kzStep3Applied ||
+            !!curProj?.pipelineMap?.kzGrantAdopted ||
+            !!curProj?.memo?.includes('kz送客済'));
+        nextTitle = isSubsidyKzRoute
+          ? '【受注・PHASE3〜4】⑦KIZASHI報酬支払確認(設置前必須) ＆ 注文書作成・クレカ審査通過・現地調査5項目確認'
+          : '【受注・PHASE3〜4】注文書作成・7STEP仕様確定・クレカ審査通過・現地調査5項目＆搬入設置日程調整（通常導入）';
+        nextMemo = isSubsidyKzRoute
+          ? `ご契約・補助金交付決定確定（受注日: ${targetDate} / +10p）。本体設置前の⑦KIZASHI報酬支払確認、クレジット審査通過確認（設置前提条件）、現地調査5項目（レセコンIP・プロバイダ書類）および搬入設置日程の確定を進める。`
+          : `通常導入（補助金なし）ご契約・受注完了（受注日: ${targetDate} / +10p）！①注文書の作成・回収、②7STEP仕様＆クレジット審査通過確認（設置前提条件）、③現地調査5項目（レセコンIP・プロバイダ書類）および搬入設置日程の確定を進める。`;
         nextDeadline = format(addDays(new Date(), 2), 'yyyy-MM-dd');
         nextPriority = '高';
       } else if (callOutcome === '面談設定') {
@@ -1203,11 +1218,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         };
 
         const currentPm = p.pipelineMap || {};
+        const isNoSubsidy = currentPm.subsidyName === '補助金なし（通常導入）';
+        const hasKzUsed =
+          !isNoSubsidy &&
+          (p.status === 'kz送客' ||
+            !!p.kzReferralDate ||
+            !!currentPm.kzStep1ConsentSent ||
+            !!currentPm.kzStep2Contacted ||
+            !!currentPm.kzStep3Applied ||
+            !!currentPm.kzGrantAdopted ||
+            !!p.memo?.includes('kz送客済'));
         let nextIntroPhase = currentPm.introPhase;
         let nextKzGrantAdopted = currentPm.kzGrantAdopted;
         if (newStatus === '受注') {
           nextIntroPhase = currentPm.introPhase === 'PHASE4' ? 'PHASE4' : 'PHASE3';
-          nextKzGrantAdopted = true;
+          nextKzGrantAdopted = hasKzUsed;
         } else if (newStatus === 'kz送客') {
           nextIntroPhase = currentPm.introPhase === 'PHASE2' ? 'PHASE2' : 'PHASE1';
           nextKzGrantAdopted = false;

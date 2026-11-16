@@ -915,7 +915,7 @@ export default function Reports() {
           border: '1px solid #dbeafe'
         }}>
           <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#1e3a8a', marginBottom: '0.6rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>🔄 8段階 進捗フロー別 分布（ステージをクリックで該当案件を表示 / kz送客＝補助金採択後に受注）</span>
+            <span>🔄 8段階 進捗フロー別 分布（ステージをクリックで該当案件を表示 / 直接受注・kz送客経由どちらも対応）</span>
             <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
               現在地件数 ／ 通過累計件数 ／ ステージ平均ポイント
             </span>

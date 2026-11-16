@@ -83,7 +83,8 @@ export function isBtoBDealerProject(project: Project): boolean {
 
 /**
  * 既存・旧ステータス表記を進捗フロー8段階（問合せ・初動・デモ・見積・検討・後追い・kz送客・受注）に正規化するヘルパー
- * ※kz送客＝補助金コンサルタントへの送客（補助金採択後に受注）
+ * ※補助金利用時：kz送客（コンサルタント送客）➔ 採択後に受注
+ * ※通常導入（補助金なし）時：検討・後追い等から直接「受注」へ進行
  */
 export function normalizeProgressStage(project: Project): SalesProgressStage {
   const s = project.status || '';
@@ -233,40 +234,40 @@ export const INTRO_FOUR_PHASES: {
 }[] = [
   {
     id: 'PHASE1',
-    title: 'PHASE 1｜申請前準備',
-    subtitle: '①GbizID・②同意書・③CL希望シート・④現地調査',
+    title: 'PHASE 1｜導入・申請前準備',
+    subtitle: '③CL希望シート・④現地調査（※補助金利用時は①GbizID・②同意書）',
     badgeColor: '#1e3a8a',
     headerBg: '#eff6ff',
     items: [
-      '① GbizID取得（プライム）',
-      '② 補助金申請同意書ご記入（スキャン送信・原本保管）',
       '③ キャッシュレス導入希望シート',
-      '④ 現地調査（弊社担当者訪問）'
+      '④ 現地調査（弊社担当者訪問）',
+      '※補助金利用時 ① GbizID取得（プライム）',
+      '※補助金利用時 ② 補助金申請同意書ご記入（スキャン送信・原本保管）'
     ]
   },
   {
     id: 'PHASE2',
-    title: 'PHASE 2｜申請〜交付決定前',
-    subtitle: '⑤補助金申請・⑥CL申込・●7STEP仕様・●見積書',
+    title: 'PHASE 2｜仕様確定・見積（補助金申請）',
+    subtitle: '⑥CL申込・●7STEP仕様・●お見積書（※補助金利用時は⑤申請）',
     badgeColor: '#1d4ed8',
     headerBg: '#dbeafe',
     items: [
-      '⑤ 補助金申請（KIZASHIサポート付き）',
       '⑥ キャッシュレス打合・申込（ジャックス連絡）',
       '● テマサック仕様確認（7 STEP）',
-      '● お見積書作成（補助金申請用）'
+      '● お見積書作成（通常導入 ／ 補助金申請用）',
+      '※補助金利用時 ⑤ 補助金申請（KIZASHIサポート付き）'
     ]
   },
   {
     id: 'PHASE3',
-    title: 'PHASE 3｜補助金交付決定後',
-    subtitle: '⑦kz報酬支払（設置前必須）・●注文書・●設置日程調整',
+    title: 'PHASE 3｜受注・ご契約後（設置準備）',
+    subtitle: '●ご注文書・●設置日程調整（※補助金利用時は⑦kz報酬支払）',
     badgeColor: '#c2410c',
     headerBg: '#ffedd5',
     items: [
-      '⑦ コンサルタント報酬お支払い（KIZASHI宛・設置前に支払）',
-      '● テマサックご注文書作成',
-      '● 搬入・設置日程の最終調整'
+      '● テマサックご注文書作成（通常ご契約／補助金交付決定）',
+      '● 搬入・設置日程の最終調整',
+      '⑦ コンサルタント報酬お支払い（※補助金利用時：KIZASHI宛・設置前に支払）'
     ]
   },
   {
@@ -613,9 +614,18 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
       'kzStep2Contacted' in updates.pipelineMap ||
       'kzStep3Applied' in updates.pipelineMap);
 
+  const isNoSubsidy = incomingPm.subsidyName === '補助金なし（通常導入）';
+  const hasKzFlow =
+    !isNoSubsidy &&
+    (project.status === 'kz送客' ||
+      !!project.kzReferralDate ||
+      !!incomingPm.kzStep1ConsentSent ||
+      !!incomingPm.kzStep2Contacted ||
+      !!incomingPm.kzStep3Applied);
+
   if (explicitKzAdoptedChange) {
     if (incomingPm.kzGrantAdopted) {
-      // 交付決定（採択）ON ➔ 営業ステータス「受注」＆ 導入フェーズ「PHASE 3」へ自動連動
+      // 受注確定（交付決定（採択）または通常ご契約）ON ➔ 営業ステータス「受注」＆ 導入フェーズ「PHASE 3」へ自動連動
       nextStatus = '受注';
       incomingPm.introPhase = 'PHASE3';
       nextOrderDate = nextOrderDate || todayStr;
@@ -628,15 +638,20 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
           id: `act-sync-${Date.now()}`,
           projectId: project.id,
           date: todayStr,
-          type: '🎉 補助金交付決定（採択）➔【受注】',
-          content: '補助金の交付決定（採択）に伴い、進捗フロー・カンバンを「受注（PHASE 3｜補助金交付決定後）」へ自動連動しました。',
+          type: isNoSubsidy
+            ? '🎉 通常導入（補助金なし）ご契約 ➔【受注】'
+            : '🎉 補助金交付決定（採択）・ご契約 ➔【受注】',
+          content: isNoSubsidy
+            ? '通常導入（補助金なし）でのご契約確定に伴い、進捗フロー・カンバンを「受注（PHASE 3｜受注・ご契約後）」へ自動連動しました。'
+            : '補助金の交付決定（採択）およびご契約確定に伴い、進捗フロー・カンバンを「受注（PHASE 3｜受注・ご契約後）」へ自動連動しました。',
           points: project.orderDate ? 0 : 10
         },
         ...nextActivities
       ];
     } else if (nextStatus === '受注') {
-      // 交付決定をOFFに戻した場合 ➔ 「kz送客（PHASE 2）」へ戻す
-      nextStatus = 'kz送客';
+      // 受注確定をOFFに戻した場合 ➔ kz送客経由なら「kz送客」、通常導入なら「検討」へ戻す
+      const revertStage: SalesProgressStage = hasKzFlow ? 'kz送客' : '検討';
+      nextStatus = revertStage;
       incomingPm.introPhase = 'PHASE2';
       nextOrderDate = undefined;
       nextMemo = nextMemo.replace(/\s*\|\s*受注済\([^)]*\)/g, '').trim();
@@ -645,8 +660,10 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
           id: `act-sync-${Date.now()}`,
           projectId: project.id,
           date: todayStr,
-          type: '🔄 進捗移動: 【受注】➔【kz送客】',
-          content: '交付決定チェックの解除に伴い、進捗フロー・カンバンを「kz送客（PHASE 2）」へ連動しました。',
+          type: `🔄 進捗移動: 【受注】➔【${revertStage}】`,
+          content: hasKzFlow
+            ? '受注・交付決定チェックの解除に伴い、進捗フロー・カンバンを「kz送客（PHASE 2）」へ連動しました。'
+            : '受注確定チェックの解除に伴い、進捗フロー・カンバンを「検討（PHASE 2）」へ連動しました。',
           points: 0
         },
         ...nextActivities
@@ -655,7 +672,9 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
   } else if (explicitIntroPhaseChange && incomingPm.introPhase) {
     const targetPh = incomingPm.introPhase;
     if (targetPh === 'PHASE3' || targetPh === 'PHASE4') {
-      incomingPm.kzGrantAdopted = true;
+      if (!isNoSubsidy) {
+        incomingPm.kzGrantAdopted = true;
+      }
       if (nextStatus !== '受注') {
         const prevSt = normalizeProgressStage(project);
         nextStatus = '受注';
@@ -679,17 +698,20 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
     } else if (targetPh === 'PHASE1' || targetPh === 'PHASE2') {
       if (nextStatus === '受注') {
         incomingPm.kzGrantAdopted = false;
-        nextStatus = 'kz送客';
+        const revertStage: SalesProgressStage = hasKzFlow ? 'kz送客' : '検討';
+        nextStatus = revertStage;
         nextOrderDate = undefined;
         nextMemo = nextMemo.replace(/\s*\|\s*受注済\([^)]*\)/g, '').trim();
-        nextKzReferralDate = nextKzReferralDate || todayStr;
+        if (hasKzFlow) {
+          nextKzReferralDate = nextKzReferralDate || todayStr;
+        }
         nextActivities = [
           {
             id: `act-sync-${Date.now()}`,
             projectId: project.id,
             date: todayStr,
-            type: '🔄 進捗移動: 【受注】➔【kz送客】',
-            content: `導入フェーズを「${targetPh}」へ戻したため、営業進捗・カンバンも「kz送客」へ連動しました。`,
+            type: `🔄 進捗移動: 【受注】➔【${revertStage}】`,
+            content: `導入フェーズを「${targetPh}」へ戻したため、営業進捗・カンバンも「${revertStage}」へ連動しました。`,
             points: 0
           },
           ...nextActivities
@@ -702,6 +724,7 @@ export function autoSyncProjectUpdates(project: Project, updates: Partial<Projec
     }
     const curIdx = SALES_PROGRESS_FLOW.indexOf(normalizeProgressStage(project));
     if (
+      !isNoSubsidy &&
       (incomingPm.kzStep1ConsentSent || incomingPm.kzStep2Contacted || incomingPm.kzStep3Applied) &&
       curIdx >= 0 &&
       curIdx < 6 &&
