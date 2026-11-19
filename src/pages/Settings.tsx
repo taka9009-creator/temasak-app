@@ -195,7 +195,7 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
 
   const triggerLabelMap: Record<RuleTriggerType, string> = {
     action_recorded: '⚡ 超かんたん司令室のアクション実行時',
-    status_changed: '🔄 7段階 進捗フロー変更時',
+    status_changed: '🔄 8段階 進捗フロー変更時',
     points_reached: '🏆 クリニック/BtoB累計ポイント到達時',
     stagnant_days: '⏰ 最終活動から停滞日数経過時',
     lost_archived: '🗄️ アーカイブ（失注理由）移動時',
@@ -1190,7 +1190,7 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
         <div>
           <h2 style={{ margin: 0 }}>AI設定・要約AIプロンプト設定</h2>
           <p style={{ color: 'var(--text-muted)', margin: '0.35rem 0 0 0', fontSize: '0.88rem' }}>
-            「超かんたん司令室」の7段階フロー・累計ポイント・13種アクション履歴と完全連動したAI要約プロンプトを設定します。
+            「超かんたん司令室」の8段階フロー・累計ポイント・13種アクション履歴と完全連動したAI要約プロンプトを設定します（デフォルト完全無料・課金ゼロ）。
           </p>
         </div>
         <button className="btn btn-primary" onClick={handleSaveAISettings} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 800 }}>
@@ -1444,50 +1444,217 @@ ${(sampleProject.activities || []).map(a => `[${a.date}] ${a.type} - ${a.content
         )}
       </div>
 
-      {/* 2. AIモデル・APIキー設定 */}
-      <div className="card">
-        <h3 style={{ fontSize: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem', marginBottom: '1rem', marginTop: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Key size={18} color="var(--primary)" /> AIモデル・APIキー設定
-        </h3>
-        <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-          Google Gemini または OpenAI のAPIキーを設定できます。Gemini利用時に特定モデルが混雑（High Demand）している場合は、自動的に別モデル（gemini-2.0-flash ➔ gemini-1.5-flash 等）および内蔵スマート要約エンジンへフォールバックします。
-        </p>
+      {/* 2. AIモデル・APIキー設定（最新版・完全無料＆課金防止ロック対応） */}
+      {(() => {
+        const isBillingLocked = aiSettings.noBillingLock !== false;
+        const isFreeActive = isBillingLocked || aiSettings.provider === 'free_local';
+        const hasAnyKey = !!(aiSettings.geminiApiKey?.trim() || aiSettings.openaiApiKey?.trim());
 
-        <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '1rem', alignItems: 'end', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.4rem' }}>優先するAIプロバイダー</div>
-            <select
-              className="input-field"
-              value={aiSettings.provider}
-              onChange={(e) => setAiSettings({ ...aiSettings, provider: e.target.value as 'openai' | 'gemini' })}
-              style={{ width: '100%', cursor: 'pointer', fontWeight: 700 }}
-            >
-              <option value="gemini">Google Gemini（推奨・自動モデル切替対応）</option>
-              <option value="openai">OpenAI (ChatGPT / gpt-4o-mini)</option>
-            </select>
-          </div>
-
-          <div>
-            <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.4rem' }}>
-              {aiSettings.provider === 'gemini' ? 'Gemini APIキー（任意）' : 'OpenAI APIキー（任意）'}
+        return (
+          <div className="card" style={{ border: isFreeActive ? '2px solid #10b981' : '1.5px solid #f59e0b', borderRadius: '0.85rem' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: '1px solid var(--border-color)',
+              paddingBottom: '0.75rem',
+              marginBottom: '1rem',
+              flexWrap: 'wrap',
+              gap: '0.5rem'
+            }}>
+              <h3 style={{ fontSize: '1rem', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Key size={18} color="var(--primary)" /> AIモデル・APIキー設定（最新版）
+              </h3>
+              <span style={{
+                padding: '0.28rem 0.75rem',
+                borderRadius: '999px',
+                fontSize: '0.78rem',
+                fontWeight: 900,
+                backgroundColor: isFreeActive ? '#dcfce7' : '#fef3c7',
+                color: isFreeActive ? '#166534' : '#92400e',
+                border: isFreeActive ? '1px solid #86efac' : '1px solid #fcd34d'
+              }}>
+                {isFreeActive ? '🛡️ 完全無料・課金ゼロ保護中（¥0）' : '⚠️ 外部API通信有効（ご自身のAPIキー枠を使用）'}
+              </span>
             </div>
-            <input
-              type="password"
-              className="input-field"
-              placeholder={aiSettings.provider === 'gemini' ? 'AIza...（未入力でもスマート要約が動作します）' : 'sk-...（未入力でもスマート要約が動作します）'}
-              value={aiSettings.provider === 'gemini' ? aiSettings.geminiApiKey : aiSettings.openaiApiKey}
-              onChange={(e) => {
-                if (aiSettings.provider === 'gemini') {
-                  setAiSettings({ ...aiSettings, geminiApiKey: e.target.value });
-                } else {
-                  setAiSettings({ ...aiSettings, openaiApiKey: e.target.value });
-                }
-              }}
-              style={{ width: '100%' }}
-            />
+
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: 1.6 }}>
+              標準で<strong>課金が発生しない安全設計</strong>です。完全無料の内蔵スマートAI参謀エンジンのほか、APIキーを使う場合も最新軽量モデル（<strong>gemini-3.5-flash-lite ➔ gemini-3.1-flash-lite ➔ gemini-4-hydrogen</strong>）のみを使用し、旧モデルや高額なPro系課金モデルは自動除外されます。
+            </p>
+
+            {/* 課金防止ロック トグルカード */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '1rem',
+              padding: '0.85rem 1rem',
+              borderRadius: '0.65rem',
+              backgroundColor: isBillingLocked ? '#ecfdf5' : '#fffbeb',
+              border: isBillingLocked ? '1.5px solid #6ee7b7' : '1.5px solid #fcd34d',
+              marginBottom: '1rem',
+              flexWrap: 'wrap'
+            }}>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <div style={{ fontWeight: 900, fontSize: '0.9rem', color: isBillingLocked ? '#065f46' : '#92400e' }}>
+                  🛡️ 課金防止ロック（完全無料モード：外部API課金を完全ブロック）
+                </div>
+                <div style={{ fontSize: '0.76rem', color: isBillingLocked ? '#047857' : '#b45309', marginTop: '0.2rem' }}>
+                  {isBillingLocked
+                    ? 'ON中（推奨）：Gemini / OpenAI / GCP 等の外部有料APIを一切呼び出さず、内蔵スマートAIのみで¥0動作します。'
+                    : 'OFF中：APIキーが入力されている場合のみ、指定した外部AIの軽量モデルへリクエストを送信します。'}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextLock = !isBillingLocked;
+                  const updated: AISettings = {
+                    ...aiSettings,
+                    noBillingLock: nextLock,
+                    provider: nextLock ? 'free_local' : aiSettings.provider === 'free_local' ? 'gemini' : aiSettings.provider
+                  };
+                  setAiSettings(updated);
+                  saveAISettings(updated);
+                  setAiSavedMsg(
+                    nextLock
+                      ? '🛡️ 課金防止ロックをON（完全無料・¥0固定）にしました'
+                      : '🔓 課金防止ロックを解除しました（※外部APIは設定した軽量モデルのみ使用します）'
+                  );
+                  setTimeout(() => setAiSavedMsg(null), 3500);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  fontWeight: 900,
+                  color: isBillingLocked ? '#059669' : '#d97706'
+                }}
+              >
+                {isBillingLocked ? <ToggleRight size={36} color="#059669" /> : <ToggleLeft size={36} color="#94a3b8" />}
+                <span>{isBillingLocked ? 'ON（保護中）' : 'OFF'}</span>
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', alignItems: 'end' }}>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.4rem' }}>優先するAIプロバイダー（動作モード）</div>
+                <select
+                  className="input-field"
+                  value={aiSettings.provider}
+                  onChange={(e) => {
+                    const nextProv = e.target.value as AISettings['provider'];
+                    const updated: AISettings = {
+                      ...aiSettings,
+                      provider: nextProv,
+                      noBillingLock: nextProv === 'free_local' ? true : aiSettings.noBillingLock
+                    };
+                    setAiSettings(updated);
+                    saveAISettings(updated);
+                  }}
+                  style={{ width: '100%', cursor: 'pointer', fontWeight: 700 }}
+                >
+                  <option value="free_local">💎 内蔵スマートAI参謀（推奨・完全無料・課金ゼロ・APIキー不要）</option>
+                  <option value="gemini">✨ Google Gemini 最新版（gemini-3.5-flash-lite / gemini-4-hydrogen・Pro課金モデル除外）</option>
+                  <option value="openai">OpenAI 最新軽量モデル (gpt-4.1-nano / gpt-4o-mini)</option>
+                </select>
+              </div>
+
+              {aiSettings.provider === 'free_local' || isBillingLocked ? (
+                <div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.4rem', color: '#065f46' }}>
+                    APIキー設定状態（完全無料保護中）
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      className="input-field"
+                      readOnly
+                      value="🔒 課金防止ロック中（APIキー未入力・完全無料で全AI要約＆文面作成が動作します）"
+                      style={{ flex: 1, minWidth: '220px', backgroundColor: '#f1f5f9', color: '#475569', fontSize: '0.8rem', fontWeight: 700 }}
+                    />
+                    {hasAnyKey && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => {
+                          const updated: AISettings = {
+                            ...aiSettings,
+                            geminiApiKey: '',
+                            openaiApiKey: '',
+                            provider: 'free_local',
+                            noBillingLock: true
+                          };
+                          setAiSettings(updated);
+                          saveAISettings(updated);
+                          setAiSavedMsg('🧹 保存されていたAPIキーを完全消去し、完全無料モードに固定しました');
+                          setTimeout(() => setAiSavedMsg(null), 3500);
+                        }}
+                        style={{
+                          padding: '0.45rem 0.75rem',
+                          fontSize: '0.78rem',
+                          fontWeight: 800,
+                          borderColor: '#10b981',
+                          color: '#065f46',
+                          backgroundColor: '#ecfdf5',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        🧹 APIキーをクリア（完全無料固定）
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: '0.84rem', fontWeight: 700, marginBottom: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{aiSettings.provider === 'gemini' ? 'Gemini APIキー（任意・無料枠/軽量モデル用）' : 'OpenAI APIキー（任意・gpt-4.1-nano用）'}</span>
+                    {hasAnyKey && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated: AISettings = {
+                            ...aiSettings,
+                            geminiApiKey: '',
+                            openaiApiKey: '',
+                            provider: 'free_local',
+                            noBillingLock: true
+                          };
+                          setAiSettings(updated);
+                          saveAISettings(updated);
+                          setAiSavedMsg('🧹 APIキーを消去し、課金防止ロック（完全無料モード）に戻しました');
+                          setTimeout(() => setAiSavedMsg(null), 3500);
+                        }}
+                        style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontSize: '0.76rem', fontWeight: 800, padding: 0 }}
+                      >
+                        🧹 APIキーをクリア（完全無料固定）
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="password"
+                    className="input-field"
+                    placeholder={aiSettings.provider === 'gemini' ? 'AIza...（未入力でもスマート要約が動作します）' : 'sk-...（未入力でもスマート要約が動作します）'}
+                    value={aiSettings.provider === 'gemini' ? aiSettings.geminiApiKey : aiSettings.openaiApiKey}
+                    onChange={(e) => {
+                      if (aiSettings.provider === 'gemini') {
+                        setAiSettings({ ...aiSettings, geminiApiKey: e.target.value });
+                      } else {
+                        setAiSettings({ ...aiSettings, openaiApiKey: e.target.value });
+                      }
+                    }}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
     </div>
   );
 

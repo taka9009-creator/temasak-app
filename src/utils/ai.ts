@@ -9,7 +9,9 @@ export interface AIPromptPreset {
 }
 
 export interface AISettings {
-  provider: 'openai' | 'gemini';
+  provider: 'free_local' | 'gemini' | 'openai';
+  noBillingLock?: boolean; // 課金防止ロック（true=完全無料モード：外部有料API通信を完全にブロック）
+  selectedModel?: string;
   openaiApiKey: string;
   geminiApiKey: string;
   prompt: string;
@@ -51,7 +53,7 @@ export const AI_PROMPT_PRESETS: AIPromptPreset[] = [
   {
     id: 'easy_os_standard',
     label: '🎯 超かんたん司令室・標準参謀（推奨）',
-    badge: '標準・7段階フロー＆ポイント連動',
+    badge: '標準・8段階フロー＆ポイント連動',
     description: '現在の温度感・次に押すべきアクションボタン(+Xp)・実施日目安・トーク要点をバランスよく出力します。',
     prompt: defaultAIPrompt
   },
@@ -134,8 +136,28 @@ export const getAISettings = (): AISettings => {
         parsed.presetId = 'easy_os_standard';
       }
 
+      const noBillingLock = parsed.noBillingLock !== false;
+      const hasAnyKey = !!(parsed.geminiApiKey?.trim() || parsed.openaiApiKey?.trim());
+      const normalizedProvider: AISettings['provider'] =
+        noBillingLock || !hasAnyKey
+          ? parsed.provider === 'openai' || parsed.provider === 'gemini'
+            ? hasAnyKey
+              ? parsed.provider
+              : 'free_local'
+            : 'free_local'
+          : parsed.provider || 'free_local';
+
+      // 旧モデルの文字列が保存されていた場合は最新軽量モデルへ移行
+      const rawModel = typeof parsed.selectedModel === 'string' ? parsed.selectedModel : '';
+      const safeModel =
+        !rawModel || rawModel.includes('1.5') || rawModel.includes('2.0') || rawModel.includes('2.5') || rawModel.includes('pro')
+          ? 'gemini-3.5-flash-lite'
+          : rawModel;
+
       return {
-        provider: parsed.provider || 'gemini',
+        provider: normalizedProvider,
+        noBillingLock,
+        selectedModel: safeModel,
         openaiApiKey: parsed.openaiApiKey || '',
         geminiApiKey: parsed.geminiApiKey || '',
         prompt: parsed.prompt || defaultAIPrompt,
@@ -149,7 +171,9 @@ export const getAISettings = (): AISettings => {
     }
   }
   return {
-    provider: 'gemini',
+    provider: 'free_local',
+    noBillingLock: true,
+    selectedModel: 'gemini-3.5-flash-lite',
     openaiApiKey: '',
     geminiApiKey: '',
     prompt: defaultAIPrompt,
@@ -367,23 +391,26 @@ export const generateSummary = async (
     systemMessage = `${systemMessage}\n\n【追加出力ルール】\n${extraRules.join('\n')}`;
   }
 
+  // 課金防止ロック（デフォルトON）または完全無料モード選択時は外部有料API通信を行わず即時¥0生成
+  if (settings.noBillingLock !== false || settings.provider === 'free_local') {
+    return generateSmartLocalSummary(activitiesText, systemMessage);
+  }
+
   if (settings.provider === 'gemini') {
     if (!settings.geminiApiKey) {
       if (settings.enableAutoFallback !== false) {
         return generateSmartLocalSummary(activitiesText, systemMessage);
       }
-      throw new Error('GeminiのAPIキーが設定されていません。「システム設定 ＞ AI設定」からAPIキーを登録するか、スマート要約フォールバックを有効にしてください。');
+      throw new Error('GeminiのAPIキーが設定されていません。「システム設定 ＞ AI設定」からAPIキーを登録するか、完全無料（内蔵スマートAI）モードをご利用ください。');
     }
 
     const apiKey = settings.geminiApiKey.trim();
 
-    // 混雑エラー (503 High demand / 429 Quota) を回避するため、複数モデルのフォールバック順序を構築
+    // 旧モデル(1.5/2.0/2.5)や高額Pro/Carbon課金モデルを完全除外し、最新の軽量・無料枠優先モデルのみを使用
     const candidateModels: string[] = [
-      'models/gemini-2.0-flash',
-      'models/gemini-2.0-flash-lite',
-      'models/gemini-1.5-flash',
-      'models/gemini-1.5-flash-8b',
-      'models/gemini-1.5-pro'
+      'models/gemini-3.5-flash-lite',
+      'models/gemini-3.1-flash-lite',
+      'models/gemini-4-hydrogen'
     ];
 
     try {
@@ -396,23 +423,39 @@ export const generateSummary = async (
           .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
           .map((m: any) => m.name as string);
 
-        // 2.0-flash / 1.5-flash などの安定モデルを優先し、preview/expで混雑しやすいモデルを後ろに回す
-        const stableFlash = validModels.filter(
-          (n: string) => n.includes('flash') && !n.includes('preview') && !n.includes('exp')
-        );
-        const otherValid = validModels.filter((n: string) => !stableFlash.includes(n));
-        const merged = [...stableFlash, ...candidateModels, ...otherValid];
+        // 高額課金リスクのある pro / ultra / carbon / argon や非推奨モデルを厳格に除外
+        const freeSafeModels = validModels.filter((n: string) => {
+          const lower = n.toLowerCase();
+          const isAllowedSeries = lower.includes('flash-lite') || lower.includes('gemini-4-hydrogen');
+          const isBlocked =
+            lower.includes('pro') ||
+            lower.includes('ultra') ||
+            lower.includes('carbon') ||
+            lower.includes('argon') ||
+            lower.includes('preview') ||
+            lower.includes('exp') ||
+            lower.includes('tts') ||
+            lower.includes('image') ||
+            lower.includes('omni') ||
+            lower.includes('1.0') ||
+            lower.includes('1.5') ||
+            lower.includes('2.0') ||
+            lower.includes('2.5');
+          return isAllowedSeries && !isBlocked;
+        });
+
+        const merged = [...freeSafeModels, ...candidateModels];
         candidateModels.length = 0;
         merged.forEach(m => {
           if (!candidateModels.includes(m)) candidateModels.push(m);
         });
       }
     } catch (e) {
-      // モデル一覧取得失敗時は既定の candidateModels を順番に試行
+      // モデル一覧取得失敗時は既定の最新軽量モデルを順番に試行
     }
 
     let lastErrorMsg = '';
-    for (const modelName of candidateModels.slice(0, 5)) {
+    for (const modelName of candidateModels.slice(0, 3)) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/${modelName}:generateContent?key=${apiKey}`;
         const response = await fetch(url, {
@@ -438,11 +481,10 @@ export const generateSummary = async (
         } else {
           const errorData = await response.json().catch(() => ({}));
           lastErrorMsg = errorData.error?.message || `HTTP ${response.status}`;
-          // APIキー自体が無効な場合(400 API_KEY_INVALID / 403)は別モデルを試しても同じなのでループを抜ける
+          // APIキー自体が無効な場合(400 API_KEY_INVALID / 403)は即終了
           if (response.status === 400 && lastErrorMsg.toLowerCase().includes('api key')) {
             break;
           }
-          // 503 (high demand) や 429 (quota) や 404 の場合は次のモデルへ自動フォールバック！
           continue;
         }
       } catch (err: any) {
@@ -451,14 +493,14 @@ export const generateSummary = async (
       }
     }
 
-    // 全モデルが混雑 (High demand) またはレート制限だった場合、スマート要約エンジンへ自動フォールバック
+    // 混雑または制限時は内蔵スマート要約エンジンへ自動フォールバック（追加課金なし）
     if (settings.enableAutoFallback !== false) {
       return generateSmartLocalSummary(activitiesText, systemMessage);
     }
 
     throw new Error(
       lastErrorMsg.includes('high demand')
-        ? '現在AIサーバーのアクセスが集中しています。AI設定で「混雑時のスマート要約フォールバック」をONにすると待ち時間ゼロで要約を生成できます。'
+        ? '現在AIサーバーのアクセスが集中しています。「課金防止ロック（完全無料モード）」をONにすると待ち時間・課金ゼロで要約を生成できます。'
         : lastErrorMsg || 'Gemini APIの呼び出しに失敗しました。'
     );
   } else {
@@ -466,7 +508,7 @@ export const generateSummary = async (
       if (settings.enableAutoFallback !== false) {
         return generateSmartLocalSummary(activitiesText, systemMessage);
       }
-      throw new Error('OpenAIのAPIキーが設定されていません。「システム設定 ＞ AI設定」からAPIキーを登録するか、スマート要約フォールバックを有効にしてください。');
+      throw new Error('OpenAIのAPIキーが設定されていません。「システム設定 ＞ AI設定」からAPIキーを登録するか、完全無料（内蔵スマートAI）モードをご利用ください。');
     }
 
     try {
@@ -477,7 +519,7 @@ export const generateSummary = async (
           Authorization: `Bearer ${settings.openaiApiKey.trim()}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4.1-nano',
           messages: [
             { role: 'system', content: systemMessage },
             { role: 'user', content: `【案件情報・活動履歴】\n${activitiesText}` }
@@ -616,9 +658,8 @@ export async function extractClinicInfoFromUrl(
 ): Promise<ExtractedClinicWebsiteInfo> {
   const normalizedUrl = rawUrl.trim().startsWith('http') ? rawUrl.trim() : `https://${rawUrl.trim()}`;
   let siteContent = '';
-  let cloudRunData: any = null;
 
-  // 1. Jina Reader (CORS対応のWebページテキスト抽出サービス) で実サイト本文を取得
+  // 1. Jina Reader (CORS対応・無料のWebページテキスト抽出) で実サイト本文を取得
   try {
     const jinaRes = await fetch(`https://r.jina.ai/${normalizedUrl}`, {
       headers: { Accept: 'text/plain' }
@@ -645,28 +686,15 @@ export async function extractClinicInfoFromUrl(
     }
   }
 
-  // 3. 既存のCloud Runエンドポイントも補助として試行
-  try {
-    const crRes = await fetch('https://extractclinicinfo-f4rmwiyjwq-an.a.run.app', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: normalizedUrl })
-    });
-    if (crRes.ok) {
-      cloudRunData = await crRes.json();
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  // 4. ヒューリスティック解析を実行
+  // 3. 無料のルールベース・ヒューリスティック解析を実行（GCP Cloud Run 課金通信なし）
   const heuristic = siteContent ? parseClinicTextHeuristic(siteContent, existingAddress) : {};
 
-  // 5. OpenAI または Gemini APIキーが設定されていれば、実サイトテキストをAIで構造化解析
+  // 4. 課金防止ロックがOFF かつ APIキー設定時のみ、最新軽量モデルでAI補助解析を実行
   const settings = getAISettings();
+  const isBillingAllowed = settings.noBillingLock === false && settings.provider !== 'free_local';
   let aiParsed: Partial<ExtractedClinicWebsiteInfo> = {};
 
-  if (siteContent && (settings.openaiApiKey || settings.geminiApiKey)) {
+  if (isBillingAllowed && siteContent && (settings.openaiApiKey || settings.geminiApiKey)) {
     const promptText = `以下の医療機関Webサイトのテキストから、基本情報をJSON形式で抽出してください。不明な項目は空文字""にしてください。
 対象クリニック名: ${clinicName || ''}
 対象URL: ${normalizedUrl}
@@ -695,7 +723,7 @@ ${siteContent.slice(0, 7000)}`;
             Authorization: `Bearer ${settings.openaiApiKey}`
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-4.1-nano',
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: 'あなたは医療機関のWebサイトから正確に基本情報を抽出するAIアシスタントです。JSONのみを出力してください。' },
@@ -710,7 +738,7 @@ ${siteContent.slice(0, 7000)}`;
         }
       } else if (settings.geminiApiKey) {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${settings.geminiApiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${settings.geminiApiKey}`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -733,15 +761,19 @@ ${siteContent.slice(0, 7000)}`;
 
   return {
     websiteUrl: normalizedUrl,
-    address: aiParsed.address || heuristic.address || cloudRunData?.address || existingAddress || '',
-    phone: aiParsed.phone || heuristic.phone || cloudRunData?.phone || '',
+    address: aiParsed.address || heuristic.address || existingAddress || '',
+    phone: aiParsed.phone || heuristic.phone || '',
     email: aiParsed.email || heuristic.email || '',
-    clinicHours: aiParsed.clinicHours || heuristic.clinicHours || cloudRunData?.clinicHours || '',
-    closedDays: aiParsed.closedDays || heuristic.closedDays || cloudRunData?.closedDays || '',
-    director: aiParsed.director || heuristic.director || cloudRunData?.director || '',
+    clinicHours: aiParsed.clinicHours || heuristic.clinicHours || '',
+    closedDays: aiParsed.closedDays || heuristic.closedDays || '',
+    director: aiParsed.director || heuristic.director || '',
     department: aiParsed.department || heuristic.department || '',
-    reservationSystem: aiParsed.reservationSystem || heuristic.reservationSystem || cloudRunData?.reservationSystem || '',
+    reservationSystem: aiParsed.reservationSystem || heuristic.reservationSystem || '',
     corpId: heuristic.corpId || '',
-    sourceMethod: siteContent ? '実サイトAI解析' : 'CloudRun解析'
+    sourceMethod: siteContent
+      ? isBillingAllowed && (settings.openaiApiKey || settings.geminiApiKey)
+        ? '実サイトAI解析（軽量モデル）'
+        : '実サイト無料解析（¥0）'
+      : '無料解析（¥0）'
   };
 }
